@@ -115,7 +115,7 @@ class CoursierDependencyDownloader extends DependencyDownloader {
     printStream.println(s"-> ${fetchUris.mkString("\n-> ")}")
 
     // Verify locations where we will download dependencies
-    val resolution = start.process.run(fetch).run
+    val resolution = start.process.run(fetch).unsafePerformSync
 
     // Report any resolution errors
     val errors: Seq[(Dependency, Seq[String])] = resolution.errors
@@ -133,7 +133,7 @@ class CoursierDependencyDownloader extends DependencyDownloader {
         artifact = a,
         cache = downloadLocations,
         logger = Some(new DownloadLogger(verbose, trace))
-      ).run)).run
+      ).run)).unsafePerformSync
 
     // Print any errors in retrieving dependencies
     localArtifacts.flatMap(_.swap.toOption).map(_.message)
@@ -163,7 +163,7 @@ class CoursierDependencyDownloader extends DependencyDownloader {
    */
   override def removeMavenRepository(url: URL): Unit = {
     repositories = repositories.filterNot {
-      case MavenRepository(urlString, _, _, _) => url.toString == urlString
+      case MavenRepository(urlString, _, _, _, _) => url.toString == urlString
       case _                                => false
     }
   }
@@ -314,22 +314,20 @@ class CoursierDependencyDownloader extends DependencyDownloader {
    * @param repositories The repositories to convert
    * @return The resulting URIs
    */
-  private def repositoriesToURIs(repositories: Seq[Repository]) = {
-    repositories.map {
-      case IvyRepository(pattern, _, _, _, _, _, _, _, _) => pattern
-      case MavenRepository(root, _, _, _) => root
-    }.map(s => Try(new URI(s))).filter(_.isSuccess).map(_.get)
-  }
+  private def repositoriesToURIs(repositories: Seq[Repository]) = repositories.map {
+    case IvyRepository(pattern, _, _, _, _, _, _, _)  => pattern.string
+    case MavenRepository(root, _, _, _, _)                  => root
+  }.map(new URI(_))
 
   /** Creates new Ivy2 local repository using base home URI. */
-  private def ivy2Local(ivy2HomeUri: URI) = IvyRepository(
+  private def ivy2Local(ivy2HomeUri: URI) = IvyRepository.parse(
     ivy2HomeUri.toString + "local/" +
       "[organisation]/[module]/(scala_[scalaVersion]/)(sbt_[sbtVersion]/)" +
       "[revision]/[type]s/[artifact](-[classifier]).[ext]"
-  )
+  ).toOption.get
 
   /** Creates new Ivy2 cache repository using base home URI. */
-  private def ivy2Cache(ivy2HomeUri: URI) = IvyRepository(
+  private def ivy2Cache(ivy2HomeUri: URI) = IvyRepository.parse(
     ivy2HomeUri.toString + "cache/" +
       "(scala_[scalaVersion]/)(sbt_[sbtVersion]/)[organisation]/[module]/" +
       "[type]s/[artifact]-[revision](-[classifier]).[ext]",
@@ -341,7 +339,7 @@ class CoursierDependencyDownloader extends DependencyDownloader {
     withChecksums = false,
     withSignatures = false,
     dropInfoAttributes = true
-  )
+  ).toOption.get
 }
 
 
