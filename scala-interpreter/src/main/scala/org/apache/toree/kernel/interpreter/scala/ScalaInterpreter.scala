@@ -180,7 +180,7 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
          returnStr
 
        }
-       case _ => ""
+       case str => str
      }
 
 
