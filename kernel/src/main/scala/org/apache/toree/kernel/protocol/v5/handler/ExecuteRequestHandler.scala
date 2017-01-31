@@ -91,13 +91,13 @@ class ExecuteRequestHandler(
           relayMsg(executeReplyMsg, relayActor)
 
           //  Send an ExecuteResult with the result of the code execution
-          if (executeResult.hasContent) {
-            val executeResultMsg = skeletonBuilder
-              .withIds(Seq(MessageType.Outgoing.ExecuteResult.toString))
-              .withHeader(MessageType.Outgoing.ExecuteResult)
-              .withContentString(executeResult).build
-            relayMsg(executeResultMsg, relayActor)
-          }
+          // if (executeResult.hasContent) {
+          val executeResultMsg = skeletonBuilder
+            .withIds(Seq(MessageType.Outgoing.ExecuteResult.toString))
+            .withHeader(MessageType.Outgoing.ExecuteResult)
+            .withContentString(executeResult).build
+          relayMsg(executeResultMsg, relayActor)
+          // }
 
         case Failure(error: Throwable) =>
           //  Send an ExecuteReplyError to the client on the Shell socket
