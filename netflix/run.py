@@ -51,6 +51,8 @@ def main(args):
     # add spark args
     command_args.extend(spark_env_opts.split() if spark_env_opts else [])
     command_args.extend(spark_args)
+    command_args.append("--deploy-mode")
+    command_args.append("client")
 
     # add toree args
     command_args.append("--class")
