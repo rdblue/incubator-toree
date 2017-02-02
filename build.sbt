@@ -30,7 +30,15 @@ lazy val root = ToreeProject("toree", ".", doFork=false, needsSpark=true).
     scalacOptions in (ScalaUnidoc, unidoc) += "-Ymacro-no-expand",
     git.gitRemoteRepo := "git://git.apache.org/incubator-toree.git",
     aggregate in assembly := false,
-    unmanagedResourceDirectories in Compile += { baseDirectory.value / "dist/toree-legal" }
+    unmanagedResourceDirectories in Compile += { baseDirectory.value / "dist/toree-legal" },
+    assemblyShadeRules in assembly := Seq(
+      ShadeRule.rename("org.objectweb.asm.**" -> "com.netflix.toree.shaded.@0").inAll
+//        .inLibrary(
+//          "org.ow2.asm" % "asm-util" % "5.1",
+//          "org.ow2.asm" % "asm-commons" % "5.1",
+//          "org.ow2.asm" % "asm-tree" % "5.1",
+//          "org.ow2.asm" % "asm" % "5.1")
+    )
   ).aggregate(
     macros,protocol,plugins,communication,kernelApi,client,scalaInterpreter,sqlInterpreter,pysparkInterpreter,sparkrInterpreter,kernel
   ).dependsOn(

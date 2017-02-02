@@ -34,7 +34,7 @@ addSbtPlugin("com.eed3si9n" % "sbt-unidoc" % "0.3.1")
 addSbtPlugin("net.virtual-void" % "sbt-dependency-graph" % "0.8.2")
 
 // Provides abilit to create an uber-jar
-addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.14.0")
+addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.14.3")
 
 // Provides a generated build info object to sync between build and application
 addSbtPlugin("com.eed3si9n" % "sbt-buildinfo" % "0.6.1")
