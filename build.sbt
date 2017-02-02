@@ -32,7 +32,8 @@ lazy val root = ToreeProject("toree", ".", doFork=false, needsSpark=true).
     aggregate in assembly := false,
     unmanagedResourceDirectories in Compile += { baseDirectory.value / "dist/toree-legal" },
     assemblyShadeRules in assembly := Seq(
-      ShadeRule.rename("org.objectweb.asm.**" -> "com.netflix.toree.shaded.@0").inAll
+      ShadeRule.rename("org.objectweb.asm.**" -> "com.netflix.toree.shaded.@0").inAll,
+      ShadeRule.rename("akka.**" -> "com.netflix.toree.shaded.@0").inAll
 //        .inLibrary(
 //          "org.ow2.asm" % "asm-util" % "5.1",
 //          "org.ow2.asm" % "asm-commons" % "5.1",
