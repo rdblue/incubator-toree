@@ -51,6 +51,7 @@ def main(args):
     java_options, spark_args = get_value(spark_args, '--driver-java-options')
     driver_java_options = " ".join([ jarg for jarg in ["-noverify", java_options] if jarg ])
 
+    work_path = os.getenv('CURRENT_JOB_WORKING_DIR')
     spark_home = os.getenv('SPARK_HOME')
     spark_env_opts = os.getenv('SPARK_OPTS')
     toree_assembly = os.getenv('TOREE_ASSEMBLY')
@@ -62,6 +63,9 @@ def main(args):
     if not toree_assembly:
         raise StandardError("TOREE_ASSEMBLY is not set")
 
+    if not work_path:
+        raise StandardError("CURRENT_JOB_WORKING_DIR is not set")
+
     command = "{spark}/bin/dsespark-submit.py".format(spark=spark_home)
 
     # dsespark-submit will remove the first arg
@@ -70,6 +74,8 @@ def main(args):
     # add spark args
     command_args.extend(spark_env_opts.split() if spark_env_opts else [])
     command_args.extend(spark_args)
+    command_args.append("--conf")
+    command_args.append("spark.log.path=" + str(work_path) + "/spark.log")
     command_args.append("--driver-java-options")
     command_args.append(driver_java_options)
     command_args.append("--deploy-mode")
