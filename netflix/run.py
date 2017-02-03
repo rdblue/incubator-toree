@@ -48,7 +48,7 @@ def get_value(args, arg_key):
 
 def main(args):
     spark_args, toree_args = split_args(args)
-    java_options, spark_args = get_value(args, '--driver-java-options')
+    java_options, spark_args = get_value(spark_args, '--driver-java-options')
     driver_java_options = " ".join([ jarg for jarg in ["-noverify", java_options] if jarg ])
 
     spark_home = os.getenv('SPARK_HOME')
