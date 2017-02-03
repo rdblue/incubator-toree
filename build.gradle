@@ -1,0 +1,265 @@
+allprojects {
+  apply plugin: 'netflix.nebula'
+}
+
+buildscript {
+  repositories { jcenter() }
+  dependencies {
+    classpath 'com.github.jengelman.gradle.plugins:shadow:1.2.4'
+  }
+}
+
+subprojects {
+  repositories {
+    mavenLocal()
+    mavenCentral()
+    maven {
+      url "http://repository.apache.org/snapshots/"
+    }
+    maven {
+      url "http://repo.typesafe.com/typesafe/releases/"
+    }
+  }
+
+  apply plugin: 'scala'
+  apply plugin: 'nebula.javadoc-jar'
+  apply plugin: 'nebula.source-jar'
+  apply plugin: 'maven' // make pom files for deployment
+  apply plugin: 'com.github.johnrengelman.shadow'
+
+  group = "org.apache.toree.kernel"
+  version = '0.2.0'
+
+  publishing {
+    repositories {
+      maven {
+        name 'mavenArtifactory'
+        url "http://artifacts.netflix.com/libs-${project.status}s-local-pom"
+      }
+    }
+  }
+
+  sourceSets {
+    main {
+      resources {
+        srcDirs "${projectDir}/../resources/compile"
+      }
+    }
+    test {
+      resources {
+        srcDirs "${projectDir}/../resources/test"
+      }
+    }
+  }
+
+  configurations {
+    compile.extendsFrom provided
+  }
+
+  tasks.withType(JavaCompile) { 
+    options.compilerArgs << '-Xlint:all' << '-Xlint:-path' << '-Xlint:-options' << '-Xlint:-processing' << '-Werror'
+  }
+
+  tasks.withType(ScalaCompile) {
+    scalaCompileOptions.additionalParameters = [
+        // '-skip-packages akka:scala',
+        '-deprecation', '-unchecked', '-feature',
+        '-Xlint', '-Xfatal-warnings', '-language:reflectiveCalls' //'-no-link-warnings'
+      ]
+  }
+
+  ext {
+    scalaVersion = '2.11'
+    scalaFullVersion = '2.11.8'
+    hadoopVersion = '2.7.2'
+    sparkVersion = '2.0.0-nflx'
+    slf4jVersion = '1.7.21'
+    akkaVersion = '2.4.8'
+  }
+
+  dependencies {
+    provided("org.apache.spark:spark-core_$scalaVersion:$sparkVersion") {
+      exclude group: 'org.jboss.netty', module: 'netty'
+    }
+    provided "org.apache.spark:spark-sql_$scalaVersion:$sparkVersion"
+    provided "org.apache.spark:spark-mllib_$scalaVersion:$sparkVersion"
+    provided "org.apache.spark:spark-repl_$scalaVersion:$sparkVersion"
+
+    testCompile "org.scalatest:scalatest_$scalaVersion:2.2.6"
+    testCompile 'org.mockito:mockito-all:1.10.19'
+    testCompile 'com.fasterxml.jackson.core:jackson-databind:2.6.5'
+  }
+}
+
+project(':macros') {
+  dependencies {
+    provided "org.scala-lang:scala-reflect:$scalaFullVersion"
+  }
+}
+
+project(':protocol') {
+  dependencies {
+    compile project(':macros')
+
+    compile("com.typesafe.play:play-json_$scalaVersion:2.3.10") {
+      exclude group: 'com.fasterxml.jackson.core'
+    }
+    compile "org.slf4j:slf4j-api:$slf4jVersion"
+  }
+}
+
+project(':plugins') {
+  dependencies {
+    compile project(':macros')
+
+    provided "org.scala-lang:scala-reflect:$scalaFullVersion"
+    compile "org.clapper:classutil_$scalaVersion:1.0.12"
+    compile "org.slf4j:slf4j-api:$slf4jVersion"
+
+    testCompile "org.scala-lang:scala-compiler:$scalaFullVersion"
+  }
+}
+
+project(':communication') {
+  dependencies {
+    compile project(':macros')
+    compile project(':protocol')
+
+    compile 'org.zeromq:jeromq:0.3.6'
+    compile "com.typesafe.akka:akka-actor_$scalaVersion:$akkaVersion"
+    compile "com.typesafe.akka:akka-slf4j_$scalaVersion:$akkaVersion"
+
+    testCompile "com.typesafe.akka:akka-testkit_$scalaVersion:$akkaVersion"
+  }
+}
+
+project(':kernel-api') {
+  dependencies {
+    compile project(':macros')
+    compile project(':plugins')
+
+    provided "org.scala-lang:scala-library:$scalaFullVersion"
+    provided "org.scala-lang:scala-compiler:$scalaFullVersion"
+    provided "org.scala-lang:scala-reflect:$scalaFullVersion"
+    compile 'org.apache.commons:commons-exec:1.3'
+    compile 'net.sf.jopt-simple:jopt-simple:4.6'
+    compile 'com.typesafe:config:1.3.0'
+    compile 'org.apache.ivy:ivy:2.4.0-rc1'
+    compile "io.get-coursier:coursier_$scalaVersion:1.0.0-M12"
+    compile "io.get-coursier:coursier-cache_$scalaVersion:1.0.0-M12"
+    compile 'org.springframework:spring-core:4.1.1.RELEASE'
+  }
+}
+
+project(':client') {
+  dependencies {
+    compile project(':macros')
+    compile project(':protocol')
+    compile project(':communication')
+
+    compile "com.typesafe.akka:akka-actor_$scalaVersion:$akkaVersion"
+    compile "com.typesafe.akka:akka-slf4j_$scalaVersion:$akkaVersion"
+
+    testCompile "com.typesafe.akka:akka-testkit_$scalaVersion:$akkaVersion"
+  }
+}
+
+project(':scala-interpreter') {
+  sourceSets {
+    main {
+      scala {
+        srcDirs "src/main/scala-$scalaVersion"
+      }
+    }
+  }
+
+  dependencies {
+    compile project(':plugins')
+    compile project(':protocol')
+    compile project(':kernel-api')
+  }
+}
+
+project(':sql-interpreter') {
+  dependencies {
+    compile project(':plugins')
+    compile project(':protocol')
+    compile project(':kernel-api')
+  }
+}
+
+project(':pyspark-interpreter') {
+  dependencies {
+    compile project(':plugins')
+    compile project(':protocol')
+    compile project(':kernel-api')
+  }
+}
+
+project(':sparkr-interpreter') {
+  dependencies {
+    compile project(':plugins')
+    compile project(':protocol')
+    compile project(':kernel-api')
+  }
+}
+
+project(':kernel') {
+  dependencies {
+    compile project(':macros')
+    compile project(':plugins')
+    compile project(':protocol')
+    compile project(':communication')
+    compile project(':kernel-api')
+    compile project(':pyspark-interpreter')
+    compile project(':scala-interpreter')
+    compile project(':sparkr-interpreter')
+    compile project(':sql-interpreter')
+
+    testCompile "com.typesafe.akka:akka-testkit_$scalaVersion:$akkaVersion"
+  }
+}
+
+project(':toree-assembly') {
+  configurations {
+    shadow
+    compile.extendsFrom provided
+    provided.extendsFrom shadow
+  }
+
+  tasks.build.dependsOn tasks.shadowJar
+  tasks.artifactoryPublish.dependsOn tasks.shadowJar
+  tasks.javadocJar.dependsOn tasks.shadowJar
+
+  shadowJar {
+    dependencies {
+      exclude(dependency("org.scala-lang:.*:.*"))
+      //exclude(dependency("org.scala-lang:scala-reflect"))
+    }
+
+    configurations = [project.configurations.shadow]
+    from(project.sourceSets.main.output)
+  }
+
+  dependencies {
+    shadow project(':macros')
+    shadow project(':plugins')
+    shadow project(':protocol')
+    shadow project(':client')
+    shadow project(':communication')
+    shadow project(':kernel-api')
+    shadow project(':pyspark-interpreter')
+    shadow project(':scala-interpreter')
+    shadow project(':sparkr-interpreter')
+    shadow project(':sql-interpreter')
+    shadow project(':kernel')
+  }
+
+  shadowJar {
+    // Relocate dependencies to avoid conflicts in Spark
+    relocate 'org.objectweb.asm', 'com.netflix.toree.shaded.org.objectweb.asm'
+    relocate 'akka', 'com.netflix.toree.shaded.akka'
+
+    archiveName = "toree-assembly-${version}.${extension}"
+  }
+}

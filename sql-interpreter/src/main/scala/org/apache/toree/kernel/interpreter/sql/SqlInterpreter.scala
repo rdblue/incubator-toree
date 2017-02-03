@@ -21,7 +21,6 @@ import java.net.URL
 import org.apache.toree.interpreter.Results.Result
 import org.apache.toree.interpreter._
 import org.apache.toree.kernel.api.KernelLike
-import org.apache.toree.kernel.BuildInfo
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -107,6 +106,6 @@ class SqlInterpreter() extends Interpreter {
   // Unsupported
   override def doQuietly[T](body: => T): T = ???
 
-  override def languageInfo = LanguageInfo("sql", BuildInfo.sparkVersion, fileExtension = Some(".sql"), pygmentsLexer = Some("sql"))
+  override def languageInfo = LanguageInfo("sql", "2.11.8", fileExtension = Some(".sql"), pygmentsLexer = Some("sql"))
 
 }
