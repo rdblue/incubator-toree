@@ -80,6 +80,7 @@ def main(args):
     command_args.append("org.apache.toree.Main")
     command_args.append(toree_assembly)
     command_args.extend(toree_env_opts.split() if toree_env_opts else [])
+    command_args.extend(toree_args)
 
     os.execv(command, command_args)
 
