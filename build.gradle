@@ -255,6 +255,11 @@ project(':toree-assembly') {
     shadow project(':kernel')
   }
 
+  task copyToLib(type: Copy) {
+    into "$buildDir/lib"
+    from configurations.shadow
+  }
+
   shadowJar {
     transform(com.github.jengelman.gradle.plugins.shadow.transformers.AppendingTransformer) {
       resource = 'reference.conf'
@@ -262,29 +267,6 @@ project(':toree-assembly') {
 
     // Relocate dependencies to avoid conflicts in Spark
     relocate 'org.objectweb.asm', 'com.netflix.toree.shaded.org.objectweb.asm'
-    relocate 'akka.AkkaException', 'com.netflix.toree.shaded.akka.AkkaException'
-    relocate 'akka.ConfigurationException', 'com.netflix.toree.shaded.akka.ConfigurationException'
-    relocate 'akka.Done\\$', 'com.netflix.toree.shaded.akka.Done\\$'
-    relocate 'akka.Done', 'com.netflix.toree.shaded.akka.Done'
-    relocate 'akka.Main\\$', 'com.netflix.toree.shaded.akka.Main\\$'
-    relocate 'akka.Main\\$Terminator\\$\\$anonfun\\$receive\\$1', 'com.netflix.toree.shaded.akka.Main\\$Terminator\\$\\$anonfun\\$receive\\$1'
-    relocate 'akka.Main\\$Terminator', 'com.netflix.toree.shaded.akka.Main\\$Terminator'
-    relocate 'akka.Main', 'com.netflix.toree.shaded.akka.Main'
-    relocate 'akka.NotUsed\\$', 'com.netflix.toree.shaded.akka.NotUsed\\$'
-    relocate 'akka.NotUsed', 'com.netflix.toree.shaded.akka.NotUsed'
-    relocate 'akka.OnlyCauseStackTrace\\$class', 'com.netflix.toree.shaded.akka.OnlyCauseStackTrace\\$class'
-    relocate 'akka.OnlyCauseStackTrace', 'com.netflix.toree.shaded.akka.OnlyCauseStackTrace'
-    relocate 'akka.Version\\$', 'com.netflix.toree.shaded.akka.Version\\$'
-    relocate 'akka.Version', 'com.netflix.toree.shaded.akka.Version'
-    relocate 'akka.actor', 'com.netflix.toree.shaded.akka.actor'
-    relocate 'akka.dispatch', 'com.netflix.toree.shaded.akka.dispatch'
-    relocate 'akka.event', 'com.netflix.toree.shaded.akka.event'
-    relocate 'akka.io', 'com.netflix.toree.shaded.akka.io'
-    relocate 'akka.japi', 'com.netflix.toree.shaded.akka.japi'
-    relocate 'akka.pattern', 'com.netflix.toree.shaded.akka.pattern'
-    relocate 'akka.routing', 'com.netflix.toree.shaded.akka.routing'
-    relocate 'akka.serialization', 'com.netflix.toree.shaded.akka.serialization'
-    relocate 'akka.util', 'com.netflix.toree.shaded.akka.util'
 
     archiveName = "toree-assembly-${version}.${extension}"
   }

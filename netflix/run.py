@@ -29,8 +29,27 @@ def split_args(args):
 
     return (spark_args, toree_args)
 
+def get_value(args, arg_key):
+    """Returns an argument's value from the list of args
+    """
+    remaining = []
+    value = None
+    i = 0
+    while i < len(args):
+        if arg_key == args[i]:
+            i += 1
+            value = args[i]
+        else:
+            remaining.append(args[i])
+
+        i += 1
+
+    return (value, remaining)
+
 def main(args):
     spark_args, toree_args = split_args(args)
+    java_options, spark_args = get_value(args, '--driver-java-options')
+    driver_java_options = " ".join([ jarg for jarg in ["-noverify", java_options] if jarg ])
 
     spark_home = os.getenv('SPARK_HOME')
     spark_env_opts = os.getenv('SPARK_OPTS')
@@ -51,6 +70,8 @@ def main(args):
     # add spark args
     command_args.extend(spark_env_opts.split() if spark_env_opts else [])
     command_args.extend(spark_args)
+    command_args.append("--driver-java-options")
+    command_args.append(driver_java_options)
     command_args.append("--deploy-mode")
     command_args.append("client")
 
