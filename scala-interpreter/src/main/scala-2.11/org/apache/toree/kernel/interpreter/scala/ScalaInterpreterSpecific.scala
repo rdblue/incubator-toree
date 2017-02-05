@@ -25,11 +25,12 @@ import org.apache.toree.global.StreamState
 import org.apache.toree.interpreter.InterpreterTypes.ExecuteOutput
 import org.apache.toree.interpreter.imports.printers.{WrapperConsole, WrapperSystem}
 import org.apache.toree.interpreter.{ExecuteError, ExecuteFailure, Interpreter, Results}
-
 import scala.tools.nsc.interpreter.{InputStream => _, OutputStream => _, _}
 import scala.concurrent.Future
 import scala.tools.nsc.{Global, Settings, util}
 import scala.util.Try
+
+import com.google.common.base.Splitter
 
 trait ScalaInterpreterSpecific extends SettingsProducerLike { this: ScalaInterpreter =>
   private val ExecutionExceptionName = "lastException"
@@ -325,20 +326,33 @@ trait ScalaInterpreterSpecific extends SettingsProducerLike { this: ScalaInterpr
     * @return tuple of (completeStatus, indent)
     */
   override def isComplete(code: String): (String, String) = {
+    // TODO: require an extra newline for code blocks
     val result = iMain.beSilentDuring {
       val parse = iMain.parse
       parse(code) match {
         case t: parse.Error => ("invalid", "")
-        case t: parse.Success => ("complete", "")
+        case t: parse.Success =>
+          val lines = code.split("\n", -1)
+          val numLines = lines.length
+          // for multiline code blocks, require an empty line before executing
+          // to mimic the behavior of ipython
+          if (numLines > 1 && lines.last.matches("\\s*\\S.*")) {
+            ("incomplete", startingWhiteSpace(lines.last))
+          } else {
+            ("complete", "")
+          }
         case t: parse.Incomplete =>
-          val lastLine = code.split("\n").last
+          val lines = code.split("\n", -1)
           // For now lets just grab the indent of the current line, if none default to 2 spaces.
-          val indent = "\\s+".r.findFirstIn(lastLine).getOrElse("  ")
-          ("incomplete", indent)
+          ("incomplete", startingWhiteSpace(lines.last))
       }
     }
     lastResultOut.reset()
     result
+  }
+
+  private def startingWhiteSpace(line: String): String = {
+    "^\\s+".r.findFirstIn(line).getOrElse("")
   }
 
   override def newSettings(args: List[String]): Settings = {
