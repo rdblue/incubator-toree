@@ -92,6 +92,7 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
    override def postInit(): Unit = {
           bindSparkSession()
           bindSparkContext()
+          bindVegas()
    }
 
    protected[scala] def buildClasspath(classLoader: ClassLoader): String = {
@@ -262,6 +263,18 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
            lastResultOut.toString(Charset.forName("UTF-8").name()).trim
          lastResultOut.reset()
          (result, output)
+     }
+   }
+
+   def bindVegas(): Unit = {
+     doQuietly {
+       interpret(
+         s"""import vegas._
+            |import vegas.render.HTMLRenderer
+            |implicit val displayer: String => Unit = { s =>
+            |  kernel.display.content("text/html", s)
+            |}
+          """.stripMargin)
      }
    }
 

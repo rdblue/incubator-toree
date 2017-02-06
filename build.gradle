@@ -253,6 +253,8 @@ project(':toree-assembly') {
     shadow project(':sparkr-interpreter')
     shadow project(':sql-interpreter')
     shadow project(':kernel')
+
+    shadow "org.vegas-viz:vegas_$scalaVersion:0.3.6"
   }
 
   task copyToLib(type: Copy) {
