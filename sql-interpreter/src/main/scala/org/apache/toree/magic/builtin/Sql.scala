@@ -40,7 +40,7 @@ class Sql extends CellMagic with IncludeKernel {
         val (_, output) = sparkRInterpreter.interpret(code)
         output match {
           case Left(executeOutput) =>
-            CellMagicOutput(MIMEType.PlainText -> executeOutput)
+            CellMagicOutput(executeOutput:_*)
           case Right(executeFailure) => executeFailure match {
             case executeAborted: ExecuteAborted =>
               throw new SqlException("SQL code was aborted!")

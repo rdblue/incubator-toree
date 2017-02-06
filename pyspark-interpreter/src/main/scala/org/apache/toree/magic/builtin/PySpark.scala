@@ -39,7 +39,7 @@ class PySpark extends CellMagic with IncludeKernel {
         val (_, output) = pySparkInterpreter.interpret(code)
         output match {
           case Left(executeOutput) =>
-            CellMagicOutput(MIMEType.PlainText -> executeOutput)
+            CellMagicOutput(executeOutput:_*)
           case Right(executeFailure) => executeFailure match {
             case executeAborted: ExecuteAborted =>
               throw new PySparkException("PySpark code was aborted!")

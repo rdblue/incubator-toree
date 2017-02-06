@@ -39,7 +39,7 @@ class Scala extends CellMagic with IncludeKernel {
         val (_, output) = scalaInterpreter.interpret(code)
         output match {
           case Left(executeOutput) =>
-            CellMagicOutput(MIMEType.PlainText -> executeOutput)
+            CellMagicOutput(executeOutput:_*)
           case Right(executeFailure) => executeFailure match {
             case executeAborted: ExecuteAborted =>
               throw new ScalaException("Scala code was aborted!")

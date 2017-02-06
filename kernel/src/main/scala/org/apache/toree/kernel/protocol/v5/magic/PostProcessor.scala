@@ -26,11 +26,7 @@ class PostProcessor(interpreter: Interpreter) extends LogLike {
   val defaultErr = "Something went wrong in postprocessor!"
 
   def process(codeOutput: ExecuteOutput): Data = {
-    interpreter.lastExecutionVariableName.flatMap(interpreter.read) match {
-      case Some(l: Left[_, _]) => matchCellMagic(codeOutput, l)
-      case Some(r: Right[_, _]) => matchLineMagic(codeOutput, r)
-      case _ => Data(MIMEType.PlainText -> codeOutput)
-    }
+    Data(codeOutput:_*)
   }
 
   protected[magic] def matchCellMagic(code: String, l: Left[_,_]) =

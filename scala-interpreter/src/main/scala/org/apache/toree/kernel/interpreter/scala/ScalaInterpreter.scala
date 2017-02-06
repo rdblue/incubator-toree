@@ -31,13 +31,13 @@ import org.apache.toree.interpreter._
 import org.apache.toree.kernel.api.{KernelLike, KernelOptions}
 import org.apache.toree.utils.{MultiOutputStream, TaskManager}
 import org.slf4j.LoggerFactory
-
 import scala.annotation.tailrec
 import scala.concurrent.{Await, Future}
 import scala.language.reflectiveCalls
 import scala.tools.nsc.Settings
 import scala.tools.nsc.interpreter.{IR, OutputStream}
 import scala.tools.nsc.util.ClassPath
+import scala.tools.scalap.scalax.rules.scalasig.NoSymbol
 import scala.util.{Try => UtilTry}
 
 class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends Interpreter with ScalaInterpreterSpecific {
@@ -158,70 +158,34 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
 
    override def interpret(code: String, silent: Boolean = false, output: Option[OutputStream]):
     (Results.Result, Either[ExecuteOutput, ExecuteFailure]) = {
-      val starting = (Results.Success, Left(""))
-      interpretRec(code.trim.split("\n").toList, false, starting)
+     interpretBlock(code, silent)
    }
 
-   def truncateResult(result:String, showType:Boolean =false, noTruncate: Boolean = false): String = {
-     val resultRX="""(?s)(res\d+):\s+(.+)\s+=\s+(.*)""".r
+  def prepareResult(output: String, showType: Boolean = false, noTruncate: Boolean = false): (Option[AnyRef], String) = {
+    val resultRX="""(?s)(res\d+):\s+(.+)\s+=\s+(.*)""".r
 
-     result match {
-       case resultRX(varName,varType,resString) => {
-           var returnStr=resString
-           if (noTruncate)
-           {
-             val r=read(varName)
-             returnStr=r.getOrElse("").toString
-           }
+    output match {
+      case resultRX(varName, varType, resString) =>
+        val result = read(varName)
+        val plainText = (showType, noTruncate) match {
+          case (true, true) =>
+            varType + " = " + result.map(_.toString).getOrElse("")
+          case (true, false) =>
+            varType + " = " + resString
+          case (false, true) =>
+            result.map(_.toString).getOrElse("")
+          case (false, false) =>
+            resString
+        }
+        (result, plainText)
+      case _ =>
+        (None, output)
+    }
+  }
 
-           if (showType)
-             returnStr=varType+" = "+returnStr
-
-         returnStr
-
-       }
-       case _ => ""
-     }
-
-
-   }
-
-   protected def interpretRec(lines: List[String], silent: Boolean = false, results: (Results.Result, Either[ExecuteOutput, ExecuteFailure])): (Results.Result, Either[ExecuteOutput, ExecuteFailure]) = {
-     lines match {
-       case Nil => results
-       case x :: xs =>
-         val output = interpretLine(x)
-
-         output._1 match {
-           // if success, keep interpreting and aggregate ExecuteOutputs
-           case Results.Success =>
-             val result = for {
-               originalResult <- output._2.left
-             } yield(truncateResult(originalResult, KernelOptions.showTypes,KernelOptions.noTruncation))
-             interpretRec(xs, silent, (output._1, result))
-
-           // if incomplete, keep combining incomplete statements
-           case Results.Incomplete =>
-             xs match {
-               case Nil => interpretRec(Nil, silent, (Results.Incomplete, results._2))
-               case _ => interpretRec(x + "\n" + xs.head :: xs.tail, silent, results)
-             }
-
-           //
-           case Results.Aborted =>
-             output
-              //interpretRec(Nil, silent, output)
-
-           // if failure, stop interpreting and return the error
-           case Results.Error =>
-             val result = for {
-               curr <- output._2.right
-             } yield curr
-             interpretRec(Nil, silent, (output._1, result))
-         }
-     }
-   }
-
+  protected def interpretBlock(code: String, silent: Boolean = false): (Results.Result, Either[ExecuteOutput, ExecuteFailure]) = {
+    interpretLine(code, silent)
+  }
 
    protected def interpretLine(line: String, silent: Boolean = false):
      (Results.Result, Either[ExecuteOutput, ExecuteFailure]) =
@@ -255,12 +219,43 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
      }
    }
 
+   protected def callToHTML(obj: Any): Option[String] = {
+     obj match {
+       case option: Option[Any] =>
+         option match {
+           case Some(ref) =>
+             callToHTML(ref)
+           case None =>
+             None
+         }
+       case _ =>
+         import scala.reflect.runtime.{universe => ru}
+         val toHtmlMethodName = ru.TermName("toHtml")
+         val classMirror = ru.runtimeMirror(Thread.currentThread().getContextClassLoader)
+         val objMirror = classMirror.reflect(obj)
+         val toHtmlSym = objMirror.symbol.toType.member(toHtmlMethodName)
+         if (toHtmlSym.isMethod) {
+           Option(String.valueOf(objMirror.reflectMethod(toHtmlSym.asMethod).apply()))
+         } else {
+           None
+         }
+     }
+   }
+
    protected def interpretMapToResultAndOutput(future: Future[Results.Result]) = {
      import scala.concurrent.ExecutionContext.Implicits.global
      future map {
        result =>
-         val output =
-           lastResultOut.toString(Charset.forName("UTF-8").name()).trim
+         val (obj, text) = prepareResult(lastResultOut.toString("UTF-8").trim)
+         val output = callToHTML(obj) match {
+           case Some(html) =>
+             Seq(
+               "text/plain" -> text,
+               "text/html" -> html
+             )
+           case None =>
+             Seq("text/plain" -> text)
+         }
          lastResultOut.reset()
          (result, output)
      }
