@@ -52,6 +52,7 @@ def main(args):
     driver_java_options = " ".join([ jarg for jarg in ["-noverify", java_options] if jarg ])
 
     work_path = os.getenv('CURRENT_JOB_WORKING_DIR')
+    log_path = work_path + "/spark.log"
     spark_home = os.getenv('SPARK_HOME')
     spark_env_opts = os.getenv('SPARK_OPTS')
     toree_assembly = os.getenv('TOREE_ASSEMBLY')
@@ -75,7 +76,7 @@ def main(args):
     command_args.extend(spark_env_opts.split() if spark_env_opts else [])
     command_args.extend(spark_args)
     command_args.append("--conf")
-    command_args.append("spark.log.path=" + str(work_path) + "/spark.log")
+    command_args.append("spark.log.path=" + log_path)
     command_args.append("--driver-java-options")
     command_args.append(driver_java_options)
     command_args.append("--deploy-mode")
@@ -87,6 +88,8 @@ def main(args):
     command_args.append(toree_assembly)
     command_args.extend(toree_env_opts.split() if toree_env_opts else [])
     command_args.extend(toree_args)
+
+    sys.stderr.write("Spark application log path: " + log_path)
 
     os.execv(command, command_args)
 
