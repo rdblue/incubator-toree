@@ -323,7 +323,6 @@ trait ScalaInterpreterSpecific extends SettingsProducerLike { this: ScalaInterpr
     * @return tuple of (completeStatus, indent)
     */
   override def isComplete(code: String): (String, String) = {
-    // TODO: require an extra newline for code blocks
     val result = iMain.beSilentDuring {
       val parse = iMain.parse
       parse(code) match {
@@ -349,7 +348,12 @@ trait ScalaInterpreterSpecific extends SettingsProducerLike { this: ScalaInterpr
   }
 
   private def startingWhiteSpace(line: String): String = {
-    "^\\s+".r.findFirstIn(line).getOrElse("")
+    val indent = "^\\s+".r.findFirstIn(line).getOrElse("")
+    if (line.matches(".*(?:(?:\\{)|(?:=>))\\s*")) {
+      indent + "  "
+    } else {
+      indent
+    }
   }
 
   override def newSettings(args: List[String]): Settings = {
