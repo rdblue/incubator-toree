@@ -52,7 +52,7 @@ class PluginSearcher {
    *
    * @return The new class finder
    */
-  protected def newClassFinder(): ClassFinder = ClassFinder(classpath)
+  protected def newClassFinder(): ClassFinder = newClassFinder(classpath)
 
   /**
    * Creates a new class finder for the given paths.
@@ -61,7 +61,9 @@ class PluginSearcher {
    *
    * @return The new class finder
    */
-  protected def newClassFinder(paths: Seq[File]): ClassFinder = ClassFinder(paths)
+  protected def newClassFinder(paths: Seq[File]): ClassFinder = {
+    ClassFinder(paths.filter(file => file.exists && file.canRead))
+  }
 
   /**
    * Loads all class information using the provided class finder.
