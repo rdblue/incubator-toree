@@ -186,11 +186,21 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
 
   registerDisplayer(classOf[ExtendedUnitSpecBuilder],
      new Displayer[ExtendedUnitSpecBuilder] {
+       class StaticHTMLRendererHTTPS(json: String) extends StaticHTMLRenderer(json) {
+         override def importsHTML(additionalImports: String*): String = {
+           // use HTTPS instead of HTTP
+           (JSImports ++ additionalImports).map { s =>
+             val newURL = s.replaceFirst("^http:", "https:")
+             "<script src=\"" + newURL + "\" charset=\"utf-8\"></script>"
+           }.mkString("\n")
+         }
+       }
+
        override def display(plot: ExtendedUnitSpecBuilder): Map[String, String] = {
          val plotAsJson = plot.toJson
          Map(
            "text/plain" -> plotAsJson,
-           "text/html" -> new StaticHTMLRenderer(plotAsJson).frameHTML()
+           "text/html" -> new StaticHTMLRendererHTTPS(plotAsJson).frameHTML()
          )
        }
      })
