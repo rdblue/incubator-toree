@@ -429,9 +429,9 @@ trait ScalaInterpreterSpecific extends SettingsProducerLike { this: ScalaInterpr
 
   protected def interpretConstructExecuteError(
     value: Option[AnyRef],
-    output: Seq[(String, String)]
+    output: Map[String, String]
   ) = {
-    val text = output.find(_._1 == "text/plain").get._2
+    val text = output("text/plain")
     value match {
       // Runtime error
       case Some(e) if e != null =>

@@ -18,7 +18,6 @@ package org.apache.toree.magic.builtin
 
 import org.apache.toree.interpreter.{ExecuteError, ExecuteAborted}
 import org.apache.toree.kernel.interpreter.pyspark.{PySparkInterpreter, PySparkException}
-import org.apache.toree.kernel.protocol.v5.MIMEType
 import org.apache.toree.magic.{CellMagicOutput, CellMagic}
 import org.apache.toree.magic.dependencies.IncludeKernel
 import org.apache.toree.plugins.annotations.Event
@@ -39,7 +38,7 @@ class PySpark extends CellMagic with IncludeKernel {
         val (_, output) = pySparkInterpreter.interpret(code)
         output match {
           case Left(executeOutput) =>
-            CellMagicOutput(executeOutput:_*)
+            executeOutput
           case Right(executeFailure) => executeFailure match {
             case executeAborted: ExecuteAborted =>
               throw new PySparkException("PySpark code was aborted!")

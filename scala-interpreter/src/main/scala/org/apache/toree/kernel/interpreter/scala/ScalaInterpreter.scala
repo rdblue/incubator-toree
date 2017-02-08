@@ -18,27 +18,24 @@
 package org.apache.toree.kernel.interpreter.scala
 
 import java.io.ByteArrayOutputStream
-import java.net.{URL, URLClassLoader}
-import java.nio.charset.Charset
 import java.util.concurrent.ExecutionException
 
 import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.repl.Main
+import org.apache.spark.sql.SparkSession
 
 import org.apache.toree.interpreter._
-import org.apache.toree.kernel.api.{KernelLike, KernelOptions}
+import org.apache.toree.kernel.api.KernelLike
 import org.apache.toree.utils.{MultiOutputStream, TaskManager}
 import org.slf4j.LoggerFactory
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.concurrent.{Await, Future}
 import scala.language.reflectiveCalls
 import scala.tools.nsc.Settings
 import scala.tools.nsc.interpreter.{IR, OutputStream}
 import scala.tools.nsc.util.ClassPath
-import scala.tools.scalap.scalax.rules.scalasig.NoSymbol
-import scala.util.{Try => UtilTry}
 
 class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends Interpreter with ScalaInterpreterSpecific {
    protected val logger = LoggerFactory.getLogger(this.getClass.getName)
@@ -92,7 +89,6 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
    override def postInit(): Unit = {
           bindSparkSession()
           bindSparkContext()
-          bindVegas()
    }
 
    protected[scala] def buildClasspath(classLoader: ClassLoader): String = {
@@ -125,6 +121,73 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
        kernel.config.getStringList("interpreter_args").asScala.toList
      }
    }
+
+   private lazy val displayers = new mutable.HashMap[Class[_], Displayer[_]]
+
+   protected def registerDisplayer[T](objClass: Class[T], displayer: Displayer[T]): Unit = {
+     displayers.put(objClass, displayer)
+   }
+
+   protected def getDisplayer[T](obj: T): Option[Displayer[_ >: T]] = {
+     var objClass: Class[_ >: T] = obj.getClass
+     while (objClass != classOf[Object]) {
+       displayers.get(objClass) match {
+         case Some(displayer) =>
+           return Some(displayer.asInstanceOf[Displayer[_ >: T]])
+         case None =>
+       }
+       objClass = objClass.getSuperclass
+     }
+     None
+   }
+
+   registerDisplayer(classOf[SparkSession], new Displayer[SparkSession] {
+     override def display(spark: SparkSession): Map[String, String] = {
+       val appId = spark.sparkContext.applicationId
+       val webProxy = spark.sparkContext.hadoopConfiguration.get("yarn.web-proxy.address")
+       val masterHost = webProxy.split(":")(0)
+       val logFile = spark.sparkContext.getConf.get("spark.log.path")
+       val html = s"""
+         |<ul>
+         |<li><a href="http://$webProxy/proxy/$appId">Spark UI</a></li>
+         |<li><a href="http://$masterHost:8088/cluster/app/$appId">Hadoop app: $appId</a></li>
+         |<li>Local logs available using %tail_log</li>
+         |</ul>
+       """.stripMargin
+       Map(
+         "text/plain" -> String.valueOf(spark),
+         "text/html" -> html
+       )
+     }
+   })
+
+   registerDisplayer(classOf[Object], new Displayer[Object] {
+     override def display(obj: Object): Map[String, String] = {
+       val objAsString = String.valueOf(obj)
+       callToHTML(obj) match {
+         case Some(html) =>
+           Map(
+             "text/plain" -> objAsString,
+             "text/html" -> html
+           )
+         case None =>
+           Map("text/plain" -> objAsString)
+       }
+     }
+
+     private def callToHTML(obj: Any): Option[String] = {
+       import scala.reflect.runtime.{universe => ru}
+       val toHtmlMethodName = ru.TermName("toHtml")
+       val classMirror = ru.runtimeMirror(obj.getClass.getClassLoader)
+       val objMirror = classMirror.reflect(obj)
+       val toHtmlSym = objMirror.symbol.toType.member(toHtmlMethodName)
+       if (toHtmlSym.isMethod) {
+         Option(String.valueOf(objMirror.reflectMethod(toHtmlSym.asMethod).apply()))
+       } else {
+         None
+       }
+     }
+   })
 
    protected def maxInterpreterThreads(kernel: KernelLike): Int = {
      kernel.config.getInt("max_interpreter_threads")
@@ -219,25 +282,21 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
      }
    }
 
-   protected def callToHTML(obj: Any): Option[String] = {
+   protected def display(obj: Any, objAsString: String): Map[String, String] = {
      obj match {
        case option: Option[Any] =>
          option match {
            case Some(ref) =>
-             callToHTML(ref)
+             display(ref, objAsString)
            case None =>
-             None
+             Map("text/plain" -> "None")
          }
        case _ =>
-         import scala.reflect.runtime.{universe => ru}
-         val toHtmlMethodName = ru.TermName("toHtml")
-         val classMirror = ru.runtimeMirror(Thread.currentThread().getContextClassLoader)
-         val objMirror = classMirror.reflect(obj)
-         val toHtmlSym = objMirror.symbol.toType.member(toHtmlMethodName)
-         if (toHtmlSym.isMethod) {
-           Option(String.valueOf(objMirror.reflectMethod(toHtmlSym.asMethod).apply()))
-         } else {
-           None
+         getDisplayer(obj) match {
+           case Some(displayer) =>
+             displayer.display(obj)
+           case None =>
+             Map("text/plain" -> objAsString)
          }
      }
    }
@@ -247,29 +306,9 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
      future map {
        result =>
          val (obj, text) = prepareResult(lastResultOut.toString("UTF-8").trim)
-         val output = callToHTML(obj) match {
-           case Some(html) =>
-             Seq(
-               "text/plain" -> text,
-               "text/html" -> html
-             )
-           case None =>
-             Seq("text/plain" -> text)
-         }
+         val output = display(obj, text)
          lastResultOut.reset()
          (result, output)
-     }
-   }
-
-   def bindVegas(): Unit = {
-     doQuietly {
-       interpret(
-         s"""import vegas._
-            |import vegas.render.HTMLRenderer
-            |implicit val displayer: String => Unit = { s =>
-            |  kernel.display.content("text/html", s)
-            |}
-          """.stripMargin)
      }
    }
 

@@ -18,7 +18,6 @@ package org.apache.toree.magic.builtin
 
 import org.apache.toree.interpreter.{ExecuteAborted, ExecuteError}
 import org.apache.toree.kernel.interpreter.scala.{ScalaException, ScalaInterpreter}
-import org.apache.toree.kernel.protocol.v5.MIMEType
 import org.apache.toree.magic.dependencies.IncludeKernel
 import org.apache.toree.magic.{CellMagic, CellMagicOutput}
 import org.apache.toree.plugins.annotations.Event
@@ -39,7 +38,7 @@ class Scala extends CellMagic with IncludeKernel {
         val (_, output) = scalaInterpreter.interpret(code)
         output match {
           case Left(executeOutput) =>
-            CellMagicOutput(executeOutput:_*)
+            executeOutput
           case Right(executeFailure) => executeFailure match {
             case executeAborted: ExecuteAborted =>
               throw new ScalaException("Scala code was aborted!")

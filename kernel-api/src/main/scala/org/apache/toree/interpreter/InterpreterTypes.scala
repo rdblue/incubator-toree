@@ -24,5 +24,5 @@ object InterpreterTypes {
   /**
    * Represents the output from an interpret execution.
    */
-  type ExecuteOutput = Seq[(String, String)]
+  type ExecuteOutput = Map[String, String]
 }
