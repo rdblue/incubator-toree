@@ -157,9 +157,18 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
          |<li>Local logs available using %tail_log</li>
          |</ul>
        """.stripMargin
+       val text = s"""
+           |Spark $appId:
+           |* http://$webProxy/proxy/$appId
+           |* http://$masterHost:8088/cluster/app/$appId
+           |
+           |Local logs:
+           |* $logFile
+           |* Also available using %tail_log
+         """.stripMargin
        Map(
          "text/plain" -> String.valueOf(sc),
-         "text/html" -> html
+         "text/html" -> text
        )
      }
    })

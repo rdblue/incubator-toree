@@ -89,7 +89,7 @@ def main(args):
     command_args.extend(toree_env_opts.split() if toree_env_opts else [])
     command_args.extend(toree_args)
 
-    sys.stderr.write("Spark application log path: " + log_path)
+    sys.stderr.write("\nSpark application log path: " + log_path + "\n\n")
 
     os.execv(command, command_args)
 
