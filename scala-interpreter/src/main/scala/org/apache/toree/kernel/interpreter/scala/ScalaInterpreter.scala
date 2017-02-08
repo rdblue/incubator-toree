@@ -151,12 +151,12 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
        val masterHost = webProxy.split(":")(0)
        val logFile = sc.getConf.get("spark.log.path")
        val html = s"""
-         |<ul>
-         |<li><a href="http://$webProxy/proxy/$appId">Spark UI</a></li>
-         |<li><a href="http://$masterHost:8088/cluster/app/$appId">Hadoop app: $appId</a></li>
-         |<li>Local logs available using %tail_log</li>
-         |</ul>
-       """.stripMargin
+           |<ul>
+           |<li><a href="http://$webProxy/proxy/$appId">Spark UI</a></li>
+           |<li><a href="http://$masterHost:8088/cluster/app/$appId">Hadoop app: $appId</a></li>
+           |<li>Local logs available using %tail_log</li>
+           |</ul>
+         """.stripMargin
        val text = s"""
            |Spark $appId:
            |* http://$webProxy/proxy/$appId
@@ -167,8 +167,8 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
            |* Also available using %tail_log
          """.stripMargin
        Map(
-         "text/plain" -> String.valueOf(sc),
-         "text/html" -> text
+         "text/plain" -> text,
+         "text/html" -> html
        )
      }
    })
