@@ -323,7 +323,7 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
            case Some(ref) =>
              display(ref, objAsString)
            case None =>
-             Map("text/plain" -> "None")
+             Map("text/plain" -> objAsString)
          }
        case _ =>
          getDisplayer(obj) match {
