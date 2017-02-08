@@ -37,6 +37,9 @@ import scala.tools.nsc.Settings
 import scala.tools.nsc.interpreter.{IR, OutputStream}
 import scala.tools.nsc.util.ClassPath
 
+import vegas.DSL.ExtendedUnitSpecBuilder
+import vegas.render.StaticHTMLRenderer
+
 class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends Interpreter with ScalaInterpreterSpecific {
    protected val logger = LoggerFactory.getLogger(this.getClass.getName)
 
@@ -129,7 +132,7 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
    }
 
    protected def getDisplayer[T](obj: T): Option[Displayer[_ >: T]] = {
-     var objClass: Class[_ >: T] = obj.getClass
+     var objClass: Class[_ >: T] = obj.getClass.asInstanceOf[Class[_ >: T]]
      while (objClass != classOf[Object]) {
        displayers.get(objClass) match {
          case Some(displayer) =>
@@ -141,12 +144,12 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
      None
    }
 
-   registerDisplayer(classOf[SparkSession], new Displayer[SparkSession] {
-     override def display(spark: SparkSession): Map[String, String] = {
-       val appId = spark.sparkContext.applicationId
-       val webProxy = spark.sparkContext.hadoopConfiguration.get("yarn.web-proxy.address")
+    registerDisplayer(classOf[SparkContext], new Displayer[SparkContext] {
+     override def display(sc: SparkContext): Map[String, String] = {
+       val appId = sc.applicationId
+       val webProxy = sc.hadoopConfiguration.get("yarn.web-proxy.address")
        val masterHost = webProxy.split(":")(0)
-       val logFile = spark.sparkContext.getConf.get("spark.log.path")
+       val logFile = sc.getConf.get("spark.log.path")
        val html = s"""
          |<ul>
          |<li><a href="http://$webProxy/proxy/$appId">Spark UI</a></li>
@@ -155,11 +158,33 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
          |</ul>
        """.stripMargin
        Map(
-         "text/plain" -> String.valueOf(spark),
+         "text/plain" -> String.valueOf(sc),
          "text/html" -> html
        )
      }
    })
+
+  registerDisplayer(classOf[SparkSession], new Displayer[SparkSession] {
+    override def display(spark: SparkSession): Map[String, String] = {
+      getDisplayer(spark.sparkContext) match {
+        case Some(displayer) =>
+          displayer.display(spark.sparkContext)
+        case _ =>
+          Map("text/plain" -> String.valueOf(spark))
+      }
+    }
+  })
+
+  registerDisplayer(classOf[ExtendedUnitSpecBuilder],
+     new Displayer[ExtendedUnitSpecBuilder] {
+       override def display(plot: ExtendedUnitSpecBuilder): Map[String, String] = {
+         val plotAsJson = plot.toJson
+         Map(
+           "text/plain" -> plotAsJson,
+           "text/html" -> new StaticHTMLRenderer(plotAsJson).frameHTML()
+         )
+       }
+     })
 
    registerDisplayer(classOf[Object], new Displayer[Object] {
      override def display(obj: Object): Map[String, String] = {
