@@ -41,13 +41,15 @@ import vegas.DSL.ExtendedUnitSpecBuilder
 import vegas.render.StaticHTMLRenderer
 
 class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends Interpreter with ScalaInterpreterSpecific {
+   private var kernel: KernelLike = _
+
    protected val logger = LoggerFactory.getLogger(this.getClass.getName)
 
    protected val _thisClassloader = this.getClass.getClassLoader
 
    protected val lastResultOut = new ByteArrayOutputStream()
 
-   protected val multiOutputStream = MultiOutputStream(List(Console.out, lastResultOut))
+   protected val multiOutputStream = lastResultOut
    private[scala] var taskManager: TaskManager = _
 
   /** Since the ScalaInterpreter can be started without a kernel, we need to ensure that we can compile things.
@@ -79,6 +81,7 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
     * @return The newly initialized interpreter
     */
    override def init(kernel: KernelLike): Interpreter = {
+     this.kernel = kernel
      val args = interpreterArgs(kernel)
      settings = newSettings(args)
      settings = appendClassPath(settings)
@@ -141,7 +144,7 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
        }
        objClass = objClass.getSuperclass
      }
-     None
+     Some(displayers(classOf[Object]).asInstanceOf[Displayer[_ >: T]])
    }
 
     registerDisplayer(classOf[SparkContext], new Displayer[SparkContext] {
@@ -268,25 +271,45 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
      interpretBlock(code, silent)
    }
 
-  def prepareResult(output: String, showType: Boolean = false, noTruncate: Boolean = false): (Option[AnyRef], String) = {
-    val resultRX="""(?s)(res\d+):\s+(.+)\s+=\s+(.*)""".r
+  def prepareResult(interpreterOutput: String,
+                    showType: Boolean = false,
+                    noTruncate: Boolean = false
+                   ): (Option[AnyRef], Option[String], Option[String]) = {
+    if (interpreterOutput.isEmpty) {
+      return (None, None, None)
+    }
 
-    output match {
-      case resultRX(varName, varType, resString) =>
-        val result = read(varName)
-        val plainText = (showType, noTruncate) match {
-          case (true, true) =>
-            varType + " = " + result.map(_.toString).getOrElse("")
-          case (true, false) =>
-            varType + " = " + resString
-          case (false, true) =>
-            result.map(_.toString).getOrElse("")
-          case (false, false) =>
-            resString
-        }
-        (result, plainText)
-      case _ =>
-        (None, output)
+    val NamedResult = """(\w+):\s+([\w\.]+)\s+=\s+(.*)""".r
+
+    var lastResult = Option.empty[AnyRef]
+    var lastResultAsString = ""
+    val text = new StringBuilder
+    val definitions = interpreterOutput.split("\n").flatMap {
+      case NamedResult(name, vtype, value) if read(name).nonEmpty =>
+        val result = read(name)
+        lastResultAsString = result.map(String.valueOf(_)).getOrElse("")
+        lastResult = result
+        Some((name, vtype, if (noTruncate) lastResultAsString else value))
+      case line if lastResultAsString.contains(line) =>
+        // do nothing with the line
+        None
+      case line =>
+        text.append(line).append("\n")
+        None
+    }.filterNot(_._1.matches("res\\d+")).toSeq
+
+    if (definitions.nonEmpty) {
+      val defString = definitions.map {
+        case (name, vtype, value) =>
+          if (showType) {
+            s"$name: $vtype = $value"
+          } else {
+            s"$name = $value"
+          }
+      }.mkString("\n")
+      (lastResult, Some(defString), if (text.isEmpty) None else Some(text.toString))
+    } else {
+      (lastResult, None, if (text.isEmpty) None else Some(text.toString))
     }
   }
 
@@ -326,21 +349,28 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
      }
    }
 
-   protected def display(obj: Any, objAsString: String): Map[String, String] = {
+   protected def display(obj: Any): Map[String, String] = {
      obj match {
        case option: Option[Any] =>
          option match {
            case Some(ref) =>
-             display(ref, objAsString)
+             display(ref)
            case None =>
-             Map("text/plain" -> objAsString)
+             Map()
          }
        case _ =>
          getDisplayer(obj) match {
            case Some(displayer) =>
-             displayer.display(obj)
+             try {
+               displayer.display(obj)
+             } catch {
+               case e: Exception =>
+                 logger.error("Error calling displayer %s on %s".format(
+                     displayer.getClass.getName, String.valueOf(obj)), e)
+                 Map("text/plain" -> String.valueOf(obj))
+             }
            case None =>
-             Map("text/plain" -> objAsString)
+             Map("text/plain" -> String.valueOf(obj))
          }
      }
    }
@@ -349,8 +379,10 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
      import scala.concurrent.ExecutionContext.Implicits.global
      future map {
        result =>
-         val (obj, text) = prepareResult(lastResultOut.toString("UTF-8").trim)
-         val output = display(obj, text)
+         val (obj, defStr, text) = prepareResult(lastResultOut.toString("UTF-8").trim)
+         defStr.foreach(kernel.display.content("text/plain", _))
+         text.foreach(kernel.display.content("text/plain", _))
+         val output = display(obj)
          lastResultOut.reset()
          (result, output)
      }
