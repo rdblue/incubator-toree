@@ -13,19 +13,19 @@ import org.apache.toree.magic.dependencies.IncludeOutputStream
 import org.apache.toree.plugins.annotations.Event
 import org.apache.toree.utils.ArgumentParsingSupport
 
-object TailLog {
+object Tail_Log {
   val LOG_PATH_PROP = "spark.log.path"
   val int = "(\\d+)".r
 }
 
-class TailLog extends LineMagic
+class Tail_Log extends LineMagic
     with IncludeKernel with IncludeOutputStream with ArgumentParsingSupport {
 
-  import TailLog._
+  import Tail_Log._
 
   private def out = new PrintStream(outputStream)
 
-  @Event(name = "taillog")
+  @Event(name = "tail_log")
   override def execute(code: String): Unit = {
     val numLines = code.trim match {
       case int(digits) => digits.toInt
@@ -52,13 +52,13 @@ class TailLog extends LineMagic
           }
           lines = lines.takeRight(numLines)
 
-          lines.foreach(printHelp(out, _))
+          lines.foreach(out.println(_))
 
         } else {
-          printHelp(out, "Cannot read log path: " + logFile)
+          out.println("Cannot read log path: " + logFile)
         }
       case _ =>
-        printHelp(out, "Cannot get log path: sc is not defined")
+        out.println("Cannot get log path: sc is not defined")
     }
   }
 }
