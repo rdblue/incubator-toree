@@ -40,7 +40,10 @@ import scala.tools.nsc.util.ClassPath
 import vegas.DSL.ExtendedUnitSpecBuilder
 import vegas.render.StaticHTMLRenderer
 
+
 class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends Interpreter with ScalaInterpreterSpecific {
+  import ScalaInterpreter._
+
    private var kernel: KernelLike = _
 
    protected val logger = LoggerFactory.getLogger(this.getClass.getName)
@@ -279,38 +282,48 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
       return (None, None, None)
     }
 
-    val NamedResult = """(\w+):\s+([\w\.]+)\s+=\s+(.*)""".r
-
     var lastResult = Option.empty[AnyRef]
     var lastResultAsString = ""
+    val definitions = new StringBuilder
     val text = new StringBuilder
-    val definitions = interpreterOutput.split("\n").flatMap {
+
+    interpreterOutput.split("\n").foreach {
       case NamedResult(name, vtype, value) if read(name).nonEmpty =>
         val result = read(name)
+
         lastResultAsString = result.map(String.valueOf(_)).getOrElse("")
         lastResult = result
-        Some((name, vtype, if (noTruncate) lastResultAsString else value))
+
+        val defLine = (showType, noTruncate) match {
+          case (true, true) =>
+            s"$name: $vtype = $lastResultAsString\n"
+          case (true, false) =>
+            s"$name: $vtype = $value\n"
+          case (false, true) =>
+            s"$name = $lastResultAsString\n"
+          case (false, false) =>
+            s"$name = $value\n"
+        }
+
+        // suppress interpreter-defined values
+        if (!name.matches("res\\d+")) {
+          definitions.append(defLine)
+        }
+
+      case Definition(defType, name) =>
+        lastResultAsString = ""
+        definitions.append(s"defined $defType $name\n")
+
       case line if lastResultAsString.contains(line) =>
         // do nothing with the line
-        None
+
       case line =>
         text.append(line).append("\n")
-        None
-    }.filterNot(_._1.matches("res\\d+")).toSeq
-
-    if (definitions.nonEmpty) {
-      val defString = definitions.map {
-        case (name, vtype, value) =>
-          if (showType) {
-            s"$name: $vtype = $value"
-          } else {
-            s"$name = $value"
-          }
-      }.mkString("\n")
-      (lastResult, Some(defString), if (text.isEmpty) None else Some(text.toString))
-    } else {
-      (lastResult, None, if (text.isEmpty) None else Some(text.toString))
     }
+
+    (lastResult,
+     if (definitions.nonEmpty) Some(definitions.toString) else None,
+     if (text.nonEmpty) Some(text.toString) else None)
   }
 
   protected def interpretBlock(code: String, silent: Boolean = false): (Results.Result, Either[ExecuteOutput, ExecuteFailure]) = {
@@ -458,6 +471,9 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
 }
 
 object ScalaInterpreter {
+
+  val NamedResult = """(\w+):\s+([\w\.]+)\s+=\s+(.*)""".r
+  val Definition = """defined\s+(\w+)\s+([\w\.]+)""".r
 
   /**
     * Utility method to ensure that a temporary directory for the REPL exists for testing purposes.
