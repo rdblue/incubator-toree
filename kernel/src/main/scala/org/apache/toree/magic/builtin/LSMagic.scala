@@ -21,6 +21,8 @@ import java.io.PrintStream
 
 import org.apache.toree.magic._
 import org.apache.toree.magic.dependencies.IncludeOutputStream
+import org.apache.toree.plugins.PluginClassLoader
+import org.apache.toree.plugins.PluginSearcher
 import org.apache.toree.plugins.annotations.Event
 
 class LSMagic extends LineMagic with IncludeOutputStream {
@@ -34,7 +36,13 @@ class LSMagic extends LineMagic with IncludeOutputStream {
    */
   @Event(name = "lsmagic")
   override def execute(code: String): Unit = {
-    val classes = new BuiltinLoader().loadClasses().toList
+    val pluginLoader = new PluginClassLoader(Nil, classOf[LSMagic].getClassLoader)
+    val pluginSearcher = new PluginSearcher
+    val pkgName = getClass.getPackage.getName
+    val classes = pluginSearcher.internal
+        .filter(info => info.name.startsWith(pkgName + "."))
+        .map(info => pluginLoader.loadClass(info.name))
+
     val lineMagics = magicNames("%", classOf[LineMagic], classes)
       .mkString(" ").toLowerCase
     val cellMagics = magicNames("%%", classOf[CellMagic], classes)
@@ -61,7 +69,7 @@ class LSMagic extends LineMagic with IncludeOutputStream {
    * @return list of class names with prefix
    */
   protected[magic] def magicNames(prefix: String, interface: Class[_],
-                                  classes: List[Class[_]]) : List[String] = {
+                                  classes: Seq[Class[_]]) : Seq[String] = {
     val filteredClasses = classes.filter(_.getInterfaces.contains(interface))
     filteredClasses.map(c => s"${prefix}${c.getSimpleName}")
   }
