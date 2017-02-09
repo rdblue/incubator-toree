@@ -328,10 +328,7 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
      val mappedFutureResult = interpretMapToCustomResult(futureResult)
 
      // Determine whether to provide an error or output
-     val futureResultAndOutput = interpretMapToResultAndOutput(mappedFutureResult)
-
-     val futureResultAndExecuteInfo =
-       interpretMapToResultAndExecuteInfo(futureResultAndOutput)
+     val futureResultAndExecuteInfo = interpretMapToResultAndOutput(mappedFutureResult)
 
      // Block indefinitely until our result has arrived
      import scala.concurrent.duration._
@@ -377,14 +374,26 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
 
    protected def interpretMapToResultAndOutput(future: Future[Results.Result]) = {
      import scala.concurrent.ExecutionContext.Implicits.global
+
+     val lastOutput = lastResultOut.toString("UTF-8").trim
+     lastResultOut.reset()
+
      future map {
-       result =>
-         val (obj, defStr, text) = prepareResult(lastResultOut.toString("UTF-8").trim)
+       case result @ (Results.Success | Results.Incomplete) =>
+         val (obj, defStr, text) = prepareResult(lastOutput)
          defStr.foreach(kernel.display.content("text/plain", _))
          text.foreach(kernel.display.content("text/plain", _))
          val output = display(obj)
-         lastResultOut.reset()
-         (result, output)
+         (result, Left(output))
+
+       case Results.Error =>
+         val (obj, defStr, text) = prepareResult(lastOutput)
+         defStr.foreach(kernel.display.content("text/plain", _))
+         val output = interpretConstructExecuteError(text.get)
+         (Results.Success, Right(output))
+
+       case Results.Aborted =>
+         (Results.Aborted, Right(null))
      }
    }
 

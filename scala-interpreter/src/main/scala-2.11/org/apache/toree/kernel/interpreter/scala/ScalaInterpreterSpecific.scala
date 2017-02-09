@@ -405,36 +405,10 @@ trait ScalaInterpreterSpecific extends SettingsProducerLike { this: ScalaInterpr
     exceptionHack.lastException = null
   }
 
-  protected def interpretMapToResultAndExecuteInfo(
-    future: Future[(Results.Result, ExecuteOutput)]
-  ): Future[(Results.Result, Either[ExecuteOutput, ExecuteFailure])] = {
-    import scala.concurrent.ExecutionContext.Implicits.global
-    future map {
-      case (Results.Success, output)    => (Results.Success, Left(output))
-      case (Results.Incomplete, output) => (Results.Incomplete, Left(output))
-      case (Results.Aborted, output)    => (Results.Aborted, Right(null))
-      case (Results.Error, output)      =>
-        val ex = Some(retrieveLastException)
-        (
-          Results.Error,
-          Right(
-            interpretConstructExecuteError(
-              ex,
-              output
-            )
-          )
-        )
-    }
-  }
-
-  protected def interpretConstructExecuteError(
-    value: Option[AnyRef],
-    output: Map[String, String]
-  ) = {
-    val text = output("text/plain")
-    value match {
+  protected def interpretConstructExecuteError(output: String) = {
+    Option(retrieveLastException) match {
       // Runtime error
-      case Some(e) if e != null =>
+      case Some(e) =>
         val ex = e.asInstanceOf[Throwable]
         clearLastException()
 
@@ -448,7 +422,7 @@ trait ScalaInterpreterSpecific extends SettingsProducerLike { this: ScalaInterpr
         //    at call_failure(<console>:19)
         //    ... 40 elided
 
-        val formattedException = text.split("\n")
+        val formattedException = output.split("\n")
 
         ExecuteError(
           ex.getClass.getName,
@@ -462,11 +436,11 @@ trait ScalaInterpreterSpecific extends SettingsProducerLike { this: ScalaInterpr
         // error that we are not parsing... maybe have it be purely
         // output and have the error check this?
           ExecuteError(
-            "Compile Error", text, List()
+            "Compile Error", output, List()
           )
         else
         // May as capture the output here.  Could be useful
-          ExecuteError("Unknown Error", text, List())
+          ExecuteError("Unknown Error", output, List())
     }
   }
 }
