@@ -314,6 +314,9 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
         lastResultAsString = ""
         definitions.append(s"defined $defType $name\n")
 
+      case Import(name) =>
+        // do nothing with the line
+
       case line if lastResultAsString.contains(line) =>
         // do nothing with the line
 
@@ -474,6 +477,7 @@ object ScalaInterpreter {
 
   val NamedResult = """(\w+):\s+([\w\.]+)\s+=\s+(.*)""".r
   val Definition = """defined\s+(\w+)\s+([\w\.]+)""".r
+  val Import = """import\s+([\w\.]+)""".r
 
   /**
     * Utility method to ensure that a temporary directory for the REPL exists for testing purposes.
