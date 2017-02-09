@@ -25,7 +25,7 @@ class TailLog extends LineMagic
 
   private def out = new PrintStream(outputStream)
 
-  @Event(name = "tail_log")
+  @Event(name = "taillog")
   override def execute(code: String): Unit = {
     val numLines = code.trim match {
       case int(digits) => digits.toInt
