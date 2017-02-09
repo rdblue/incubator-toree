@@ -391,11 +391,11 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
    protected def interpretMapToResultAndOutput(future: Future[Results.Result]) = {
      import scala.concurrent.ExecutionContext.Implicits.global
 
-     val lastOutput = lastResultOut.toString("UTF-8").trim
-     lastResultOut.reset()
-
      future map {
        case result @ (Results.Success | Results.Incomplete) =>
+         val lastOutput = lastResultOut.toString("UTF-8").trim
+         lastResultOut.reset()
+
          val (obj, defStr, text) = prepareResult(lastOutput)
          defStr.foreach(kernel.display.content("text/plain", _))
          text.foreach(kernel.display.content("text/plain", _))
@@ -403,6 +403,9 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
          (result, Left(output))
 
        case Results.Error =>
+         val lastOutput = lastResultOut.toString("UTF-8").trim
+         lastResultOut.reset()
+
          val (obj, defStr, text) = prepareResult(lastOutput)
          defStr.foreach(kernel.display.content("text/plain", _))
          val output = interpretConstructExecuteError(text.get)
