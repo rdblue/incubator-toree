@@ -495,8 +495,8 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
 
 object ScalaInterpreter {
 
-  val NamedResult = """(\w+):\s+([\w\.]+)\s+=\s+(.*)""".r
-  val Definition = """defined\s+(\w+)\s+([\w\.]+)""".r
+  val NamedResult = """(\w+):\s+([^=]+)\s+=\s+(.*)""".r
+  val Definition = """defined\s+(\w+)\s+(.+)""".r
   val Import = """import\s+([\w\.]+)""".r
 
   /**
