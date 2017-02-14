@@ -490,7 +490,12 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
   /**
     * Returns the language metadata for syntax highlighting
     */
-  override def languageInfo = LanguageInfo("scala", "2.11.8", fileExtension = Some(".scala"))
+  override def languageInfo = LanguageInfo(
+    "scala", "2.11.8",
+    fileExtension = Some(".scala"),
+    pygmentsLexer = Some("scala"),
+    mimeType = Some("text/x-scala"),
+    codemirrorMode = Some("text/x-scala"))
 }
 
 object ScalaInterpreter {
