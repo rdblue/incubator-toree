@@ -507,9 +507,9 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
 
 object ScalaInterpreter {
 
-  val NamedResult = """(\w+):\s+([^=]+)\s+=\s+(.*)""".r
+  val NamedResult = """(\w+):\s+([^=]+)\s+=\s*(.*)""".r
   val Definition = """defined\s+(\w+)\s+(.+)""".r
-  val Import = """import\s+([\w\.]+)""".r
+  val Import = """import\s+([\w\.,\{\}\s]+)""".r
 
   /**
     * Utility method to ensure that a temporary directory for the REPL exists for testing purposes.
