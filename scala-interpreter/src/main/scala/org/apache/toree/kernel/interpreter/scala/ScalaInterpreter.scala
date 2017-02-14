@@ -37,6 +37,7 @@ import scala.tools.nsc.Settings
 import scala.tools.nsc.interpreter.{IR, OutputStream}
 import scala.tools.nsc.util.ClassPath
 
+import org.apache.toree.kernel.protocol.v5.MIMEType
 import vegas.DSL.ExtendedUnitSpecBuilder
 import vegas.render.StaticHTMLRenderer
 
@@ -174,8 +175,8 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
            |* Also available using %tail_log
          """.stripMargin
        Map(
-         "text/plain" -> text,
-         "text/html" -> html
+         MIMEType.PlainText -> text,
+         MIMEType.TextHtml -> html
        )
      }
    })
@@ -186,7 +187,7 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
         case Some(displayer) =>
           displayer.display(spark.sparkContext)
         case _ =>
-          Map("text/plain" -> String.valueOf(spark))
+          Map(MIMEType.PlainText -> String.valueOf(spark))
       }
     }
   })
@@ -206,8 +207,9 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
        override def display(plot: ExtendedUnitSpecBuilder): Map[String, String] = {
          val plotAsJson = plot.toJson
          Map(
-           "text/plain" -> plotAsJson,
-           "text/html" -> new StaticHTMLRendererHTTPS(plotAsJson).frameHTML()
+           MIMEType.PlainText -> plotAsJson,
+           MIMEType.ApplicationJson -> plotAsJson,
+           MIMEType.TextHtml -> new StaticHTMLRendererHTTPS(plotAsJson).frameHTML()
          )
        }
      })
@@ -218,11 +220,11 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
        callToHTML(obj) match {
          case Some(html) =>
            Map(
-             "text/plain" -> objAsString,
-             "text/html" -> html
+             MIMEType.PlainText -> objAsString,
+             MIMEType.TextHtml -> html
            )
          case None =>
-           Map("text/plain" -> objAsString)
+           Map(MIMEType.PlainText -> objAsString)
        }
      }
 
@@ -381,10 +383,10 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
                case e: Exception =>
                  logger.error("Error calling displayer %s on %s".format(
                      displayer.getClass.getName, String.valueOf(obj)), e)
-                 Map("text/plain" -> String.valueOf(obj))
+                 Map(MIMEType.PlainText -> String.valueOf(obj))
              }
            case None =>
-             Map("text/plain" -> String.valueOf(obj))
+             Map(MIMEType.PlainText -> String.valueOf(obj))
          }
      }
    }
@@ -398,8 +400,8 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
          lastResultOut.reset()
 
          val (obj, defStr, text) = prepareResult(lastOutput)
-         defStr.foreach(kernel.display.content("text/plain", _))
-         text.foreach(kernel.display.content("text/plain", _))
+         defStr.foreach(kernel.display.content(MIMEType.PlainText, _))
+         text.foreach(kernel.display.content(MIMEType.PlainText, _))
          val output = display(obj)
          (result, Left(output))
 
@@ -408,7 +410,7 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
          lastResultOut.reset()
 
          val (obj, defStr, text) = prepareResult(lastOutput)
-         defStr.foreach(kernel.display.content("text/plain", _))
+         defStr.foreach(kernel.display.content(MIMEType.PlainText, _))
          val output = interpretConstructExecuteError(text.get)
          (Results.Error, Right(output))
 
