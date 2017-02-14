@@ -75,7 +75,7 @@ class MagicManager(private val pluginManager: PluginManager) extends Dynamic {
   }
 
   @throws[MagicNotFoundException]
-  def applyDynamic(name: String)(args: Any*): CellMagicOutput = {
+  def applyDynamic(name: String)(args: Any*): MagicOutput = {
     val arg = args.headOption.map(_.toString).getOrElse("")
 
     import org.apache.toree.plugins.Implicits._
@@ -90,25 +90,26 @@ class MagicManager(private val pluginManager: PluginManager) extends Dynamic {
     }
   }
 
-  private def handleMagicResult(name: String, result: Try[Any]): CellMagicOutput = result match {
-     case Success(magicOutput) => magicOutput match {
-        case null | _: BoxedUnit => CellMagicOutput()
-        case cmo: Map[_, _]
-             if cmo.keys.forall(_.isInstanceOf[String]) &&
-                cmo.values.forall(_.isInstanceOf[String]) =>
-             cmo.asInstanceOf[CellMagicOutput]
-        case unknown =>
-          val message =
-            s"""Magic $name did not return proper magic output
-               |type. Expected ${classOf[CellMagicOutput].getName} or
-               |${classOf[LineMagicOutput].getName}, but found type of
-               |${unknown.getClass.getName}.""".trim.stripMargin
-          logger.warn(message)
-          CellMagicOutput("text/plain" -> message)
-      }
-      case Failure(t) =>
-        val message =  s"Magic $name failed to execute with error: \n${t.getMessage}"
-        logger.warn(message, t)
-        CellMagicOutput("text/plain" -> message)
+  private def handleMagicResult(name: String, result: Try[Any]): MagicOutput = result match {
+    case Success(magicOutput) => magicOutput match {
+      case out: MagicOutput => out
+      case null | _: BoxedUnit => MagicOutput()
+      case cmo: Map[_, _]
+        if cmo.keys.forall(_.isInstanceOf[String]) &&
+            cmo.values.forall(_.isInstanceOf[String]) =>
+        MagicOutput(cmo.asInstanceOf[Map[String, String]].toSeq:_*)
+      case unknown =>
+        val message =
+          s"""Magic $name did not return proper magic output
+              |type. Expected ${classOf[CellMagicOutput].getName} or
+              |${classOf[LineMagicOutput].getName}, but found type of
+              |${unknown.getClass.getName}.""".trim.stripMargin
+        logger.warn(message)
+        MagicOutput("text/plain" -> message)
+    }
+    case Failure(t) =>
+      val message =  s"Magic $name failed to execute with error: \n${t.getMessage}"
+      logger.warn(message, t)
+      MagicOutput("text/plain" -> message)
   }
 }

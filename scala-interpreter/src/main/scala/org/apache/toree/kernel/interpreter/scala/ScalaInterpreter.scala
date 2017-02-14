@@ -38,6 +38,7 @@ import scala.tools.nsc.interpreter.{IR, OutputStream}
 import scala.tools.nsc.util.ClassPath
 
 import org.apache.toree.kernel.protocol.v5.MIMEType
+import org.apache.toree.magic.MagicOutput
 import vegas.DSL.ExtendedUnitSpecBuilder
 import vegas.render.StaticHTMLRenderer
 
@@ -151,6 +152,10 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
      }
      Some(displayers(classOf[Object]).asInstanceOf[Displayer[_ >: T]])
    }
+
+  registerDisplayer(classOf[MagicOutput], new Displayer[MagicOutput] {
+    override def display(data: MagicOutput): Map[String, String] = data.asMap
+  })
 
     registerDisplayer(classOf[SparkContext], new Displayer[SparkContext] {
      override def display(sc: SparkContext): Map[String, String] = {
