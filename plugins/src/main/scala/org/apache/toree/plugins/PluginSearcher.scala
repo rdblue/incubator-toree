@@ -132,7 +132,7 @@ class PluginSearcher {
      .split(File.pathSeparator)
      .map(s => if (s.trim.length == 0) "." else s)
      .map(new File(_))
-     .filter(_.getAbsolutePath.toLowerCase.contains("toree"))
+     .filter(_.getAbsolutePath.toLowerCase.contains("toree-assembly"))
      .toList
   }
 }
