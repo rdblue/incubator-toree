@@ -106,6 +106,11 @@ class SqlInterpreter() extends Interpreter {
   // Unsupported
   override def doQuietly[T](body: => T): T = ???
 
-  override def languageInfo = LanguageInfo("sql", "2.11.8", fileExtension = Some(".sql"), pygmentsLexer = Some("sql"))
+  override def languageInfo = LanguageInfo(
+    "sql", "2.11.8",
+    fileExtension = Some(".sql"),
+    pygmentsLexer = Some("sql"),
+    mimeType = Some("text/x-sql"),
+    codemirrorMode = Some("text/x-sql"))
 
 }
