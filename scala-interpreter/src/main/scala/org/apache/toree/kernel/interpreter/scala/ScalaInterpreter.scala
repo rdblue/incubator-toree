@@ -170,7 +170,8 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
            |<ul>
            |<li><a href="http://$webProxy/proxy/$appId">Spark UI</a></li>
            |<li><a href="http://$masterHost:8088/cluster/app/$appId">Hadoop app: $appId</a></li>
-           |<li>Local logs available using %tail_log</li>
+           |<li>Local logs are available using %tail_log</li>
+           |<li>Local logs are at: $logFile</li>
            |</ul>
          """.stripMargin
        val text = s"""
