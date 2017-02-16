@@ -178,7 +178,9 @@ project(':scala-interpreter') {
     compile project(':protocol')
     compile project(':kernel-api')
 
-    compile "org.vegas-viz:vegas_$scalaVersion:0.3.6"
+    compile("org.vegas-viz:vegas_$scalaVersion:0.3.6") {
+      exclude module: 'org.scala-lang'
+    }
   }
 }
 

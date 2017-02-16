@@ -46,6 +46,14 @@ def get_value(args, arg_key):
 
     return (value, remaining)
 
+# from Toree's install script
+def find_py4j(spark_home):
+    python_lib_contents = os.listdir("{0}/python/lib".format(spark_home))
+    try:
+        return list(filter(lambda filename: "py4j" in filename, python_lib_contents))[0]
+    except:
+        return None
+
 def main(args):
     spark_args, toree_args = split_args(args)
     java_options, spark_args = get_value(spark_args, '--driver-java-options')
@@ -91,6 +99,9 @@ def main(args):
 
     sys.stderr.write("\nSpark application log path: " + log_path + "\n\n")
 
+    py4j = find_py4j(spark_home)
+    if py4j:
+        os.environ['PYTHON_PATH'] = "{spark_home}/python:{spark_home}/python/lib/{py4j}".format(spark_home=spark_home, py4j=py4j)
     os.execv(command, command_args)
 
 if __name__ == '__main__':
