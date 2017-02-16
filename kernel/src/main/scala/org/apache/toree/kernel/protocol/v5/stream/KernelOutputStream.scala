@@ -90,16 +90,10 @@ class KernelOutputStream(
     // Avoid building and sending a kernel message if the contents (when
     // trimmed) are empty and the flag to send anyway is disabled
     if (!sendEmptyOutput && contents.trim.isEmpty) {
-      val contentsWithVisibleWhitespace = contents
-        .replace("\n", "\\n")
-        .replace("\t", "\\t")
-        .replace("\r", "\\r")
-        .replace(" ", "\\s")
-      logger.warn(s"Suppressing empty output: '$contentsWithVisibleWhitespace'")
       return
     }
 
-    logger.trace(s"Content to flush: '$contents'")
+    logger.trace("Content to flush: '{}'", contents)
 
     val streamContent = StreamContent(
       streamType, contents
