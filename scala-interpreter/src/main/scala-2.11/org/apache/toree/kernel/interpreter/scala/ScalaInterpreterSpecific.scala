@@ -380,10 +380,7 @@ trait ScalaInterpreterSpecific extends SettingsProducerLike { this: ScalaInterpr
             iMain.interpret(code)
           }
         } else {
-
-          val result = iMain.interpret(code)
-          iMain.compile("").eval()
-          result
+          iMain.interpret(code)
         }
       }
     }
