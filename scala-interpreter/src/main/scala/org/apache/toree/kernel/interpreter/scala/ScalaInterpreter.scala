@@ -139,7 +139,7 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
 
    private lazy val displayers = new mutable.HashMap[Class[_], Displayer[_]]
 
-   protected def registerDisplayer[T](objClass: Class[T], displayer: Displayer[T]): Unit = {
+   def registerDisplayer[T](objClass: Class[T], displayer: Displayer[T]): Unit = {
      displayers.put(objClass, displayer)
    }
 
