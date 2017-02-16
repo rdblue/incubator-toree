@@ -37,6 +37,8 @@ import scala.tools.nsc.Settings
 import scala.tools.nsc.interpreter.{IR, OutputStream}
 import scala.tools.nsc.util.ClassPath
 
+import org.apache.spark.sql.SQLContext
+
 import org.apache.toree.kernel.protocol.v5.MIMEType
 import org.apache.toree.magic.MagicOutput
 import vegas.DSL.ExtendedUnitSpecBuilder
@@ -100,6 +102,7 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
   override def postInit(): Unit = {
     bindSparkSession()
     bindSparkContext()
+    bindSqlContext()
     defineImplicits()
   }
 
@@ -426,10 +429,9 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
 
    def bindSparkContext() = {
      val bindName = "sc"
-
      doQuietly {
        logger.info(s"Binding SparkContext into interpreter as $bindName")
-      interpret(s"""def ${bindName}: ${classOf[SparkContext].getName} = kernel.sparkContext""")
+       interpret(s"""def ${bindName}: ${classOf[SparkContext].getName} = kernel.sparkContext""")
 
        // NOTE: This is needed because interpreter blows up after adding
        //       dependencies to SparkContext and Interpreter before the
@@ -438,43 +440,31 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
        //       to avoid the kernel's interpreter blowing up (must be done
        //       inside the interpreter)
        logger.debug("Initializing Spark cluster in interpreter")
-
-//       doQuietly {
-//         interpret(Seq(
-//           "val $toBeNulled = {",
-//           "  var $toBeNulled = sc.emptyRDD.collect()",
-//           "  $toBeNulled = null",
-//           "}"
-//         ).mkString("\n").trim())
-//       }
      }
    }
 
   def bindSparkSession(): Unit = {
     val bindName = "spark"
-
-     doQuietly {
-       // TODO: This only adds the context to the main interpreter AND
-       //       is limited to the Scala interpreter interface
-       logger.debug(s"Binding SQLContext into interpreter as $bindName")
+    doQuietly {
+      // TODO: This only adds the context to the main interpreter AND
+      //       is limited to the Scala interpreter interface
+      logger.debug(s"Binding SparkSession into interpreter as $bindName")
 
       interpret(s"""def ${bindName}: ${classOf[SparkSession].getName} = kernel.sparkSession""")
+    }
+  }
 
-//      interpret(
-//        s"""
-//           |def $bindName: ${classOf[SparkSession].getName} = {
-//           |   if (org.apache.toree.kernel.interpreter.scala.InterpreterHelper.sparkSession != null) {
-//           |     org.apache.toree.kernel.interpreter.scala.InterpreterHelper.sparkSession
-//           |   } else {
-//           |     val s = org.apache.spark.repl.Main.createSparkSession()
-//           |     org.apache.toree.kernel.interpreter.scala.InterpreterHelper.sparkSession = s
-//           |     s
-//           |   }
-//           |}
-//         """.stripMargin)
-
-     }
-   }
+  def bindSqlContext(): Unit = {
+    val bindName = "sqlContext"
+    doQuietly {
+      logger.debug(s"Binding SQLContext into interpreter as $bindName")
+      interpret(
+        s"""def ${bindName}: ${classOf[SQLContext].getName} = {
+           |  java.lang.System.out.println("WARNING: sqlContext is deprecated. Use spark instead.")
+           |  kernel.sqlContext
+           |}""".stripMargin)
+    }
+  }
 
   def defineImplicits(): Unit = {
     val code =

@@ -107,6 +107,8 @@ trait KernelLike {
 
   def sparkContext: SparkContext
 
+  def sqlContext: SQLContext
+
   def sparkConf: SparkConf
 
   def javaSparkContext: JavaSparkContext

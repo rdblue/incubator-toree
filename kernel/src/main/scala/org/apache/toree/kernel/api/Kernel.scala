@@ -42,6 +42,7 @@ import org.apache.toree.utils.{KeyValuePairUtils, LogLike}
 import scala.language.dynamics
 import scala.reflect.runtime.universe._
 import scala.util.{DynamicVariable, Try}
+import org.apache.spark.sql.SQLContext
 import org.apache.toree.plugins.SparkReady
 
 /**
@@ -398,6 +399,7 @@ class Kernel (
 
   override def sparkSession: SparkSession = SparkSession.builder.getOrCreate
   override def sparkContext: SparkContext = sparkSession.sparkContext
+  override def sqlContext: SQLContext = sparkSession.sqlContext
   override def sparkConf: SparkConf = sparkSession.sparkContext.getConf
   override def javaSparkContext: JavaSparkContext = javaSparkContext(sparkSession)
 
