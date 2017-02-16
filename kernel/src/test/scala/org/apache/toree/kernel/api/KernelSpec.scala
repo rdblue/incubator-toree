@@ -67,7 +67,7 @@ class KernelSpec extends FunSpec with Matchers with MockitoSugar
     when(mockInterpreter.interpret(BadCode.get))
       .thenReturn((Results.Incomplete, null))
     when(mockInterpreter.interpret(GoodCode.get))
-      .thenReturn((Results.Success, Left(new ExecuteOutput("ok"))))
+      .thenReturn((Results.Success, Left(ExecuteOutput(MIMEType.PlainText -> "ok"))))
     when(mockInterpreter.interpret(ErrorCode.get))
       .thenReturn((Results.Error, Right(ExecuteError("error","bad", List("1")))))
 

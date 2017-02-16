@@ -18,6 +18,7 @@
 package org.apache.toree.kernel.protocol.v5.relay
 
 import java.io.OutputStream
+
 import akka.actor._
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import org.apache.toree.interpreter.{ExecuteAborted, ExecuteError}
@@ -26,6 +27,7 @@ import org.apache.toree.kernel.protocol.v5.content._
 import org.apache.toree.kernel.protocol.v5.kernel.ActorLoader
 import org.apache.toree.kernel.protocol.v5.magic.{MagicParser, PostProcessor}
 import com.typesafe.config.ConfigFactory
+import org.apache.toree.magic.MagicOutput
 import org.apache.toree.plugins.PluginManager
 import org.apache.toree.plugins.dependencies.DependencyManager
 import org.mockito.Mockito._
@@ -145,12 +147,13 @@ class ExecuteRequestRelaySpec extends TestKit(
 
       it("should return an (ExecuteReply, ExecuteResult) on interpreter " +
          "success") {
-        val expected = "SOME OTHER VALUE"
+        val expectedPlainText = "SOME OTHER VALUE"
+        val expected = Map(MIMEType.PlainText -> expectedPlainText)
         val executeRequest =
           ExecuteRequest("notAMagic", false, true, UserExpressions(), true)
 
         val mockPostProcessor = mock[PostProcessor]
-        doReturn(Data(MIMEType.PlainText -> expected))
+        doReturn(Data(MIMEType.PlainText -> expectedPlainText))
           .when(mockPostProcessor).process(expected)
         val mockPluginManager = mock[PluginManager]
         val mockDependencyManager = mock[DependencyManager]
@@ -183,7 +186,7 @@ class ExecuteRequestRelaySpec extends TestKit(
           MaxAkkaTestTimeout,
           (
             ExecuteReplyOk(1, Some(Payloads()), Some(UserExpressions())),
-            ExecuteResult(1, Data(MIMEType.PlainText -> expected), Metadata())
+            ExecuteResult(1, expected, Metadata())
           )
         )
       }

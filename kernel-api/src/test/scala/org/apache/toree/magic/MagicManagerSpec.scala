@@ -185,7 +185,7 @@ class MagicManagerSpec
 
         val result = magicManager.applyDynamic("TEST")()
 
-        result.isLeft should be(true)
+        result should be(MagicOutput("text/plain" -> "Magic TEST failed to execute with error: \nnull"))
       }
 
       it("should fire an event with the lowercase of the magic name") {
@@ -236,9 +236,9 @@ class MagicManagerSpec
         verify(mockPluginManager).fireEventFirstResult(anyString(), mockEq(Seq(expected)): _*)
       }
 
-      it("should return a Right[LineMagicOutput] if line magic execution is successful and returns null") {
+      it("should return a LineMagicOutput if line magic execution is successful and returns null") {
         val pluginName = "TEST"
-        val expected = Right(LineMagicOutput)
+        val expected = LineMagicOutput
 
         doReturn(Some(SuccessPluginMethodResult(
           mock[PluginMethod],
@@ -251,9 +251,9 @@ class MagicManagerSpec
         result should be(expected)
       }
 
-      it("should return a Right[LineMagicOutput] if line magic execution is successful and returns BoxedUnit") {
+      it("should return a MagicOutput if line magic execution is successful and returns BoxedUnit") {
         val pluginName = "TEST"
-        val expected = Right(LineMagicOutput)
+        val expected = LineMagicOutput
 
         doReturn(Some(SuccessPluginMethodResult(
           mock[PluginMethod],
@@ -266,18 +266,18 @@ class MagicManagerSpec
         result should be(expected)
       }
 
-      it("should return a Left[CellMagicOutput] if cell magic execution is successful") {
+      it("should return a MagicOutput if cell magic execution is successful") {
         val pluginName = "TEST"
-        val cellMagicOutput = CellMagicOutput("our/type" -> "TEST CONTENT")
+        val magicOutput = MagicOutput("our/type" -> "TEST CONTENT")
         doReturn(Some(SuccessPluginMethodResult(
           mock[PluginMethod],
-          cellMagicOutput
+          magicOutput
         ))).when(mockPluginManager).fireEventFirstResult(
           anyString(), any(classOf[Dependency[_ <: AnyRef]])
         )
 
         val result = magicManager.applyDynamic(pluginName)(Nil: _*)
-        result.left.get should be(cellMagicOutput)
+        result should be(magicOutput)
       }
 
       it("should return a Left[CellMagicOutput] if is a magic but not a line or cell") {
@@ -291,11 +291,11 @@ class MagicManagerSpec
         )
 
         val result = magicManager.applyDynamic(pluginName)(Nil: _*)
-        result.left.get("text/plain") should not be (empty)
+        result.asMap.get("text/plain") should not be (empty)
 
       }
 
-      it("should return a Left[CellMagicOutput] if magic fails") {
+      it("should return a MagicOutput if magic fails") {
         val pluginName = "TEST"
 
         doReturn(Some(FailurePluginMethodResult(
@@ -306,7 +306,7 @@ class MagicManagerSpec
         )
 
         val result = magicManager.applyDynamic(pluginName)(Nil: _*)
-        result.left.get("text/plain") should not be (empty)
+        result.asMap.get("text/plain") should not be (empty)
       }
 
       it("should throw a MagicNotFoundException when a magic cannot be found") {

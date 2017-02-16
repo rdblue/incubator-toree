@@ -56,7 +56,7 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
 
    protected val lastResultOut = new ByteArrayOutputStream()
 
-   protected val multiOutputStream = lastResultOut
+   protected val multiOutputStream: OutputStream = lastResultOut
    private[scala] var taskManager: TaskManager = _
 
   /** Since the ScalaInterpreter can be started without a kernel, we need to ensure that we can compile things.

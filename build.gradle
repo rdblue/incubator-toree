@@ -109,6 +109,14 @@ project(':protocol') {
 }
 
 project(':plugins') {
+  sourceSets {
+    test {
+      scala {
+        srcDirs "src/test/scala-$scalaVersion"
+      }
+    }
+  }
+
   dependencies {
     compile project(':macros')
 
@@ -141,6 +149,7 @@ project(':kernel-api') {
     provided "org.scala-lang:scala-library:$scalaFullVersion"
     provided "org.scala-lang:scala-compiler:$scalaFullVersion"
     provided "org.scala-lang:scala-reflect:$scalaFullVersion"
+
     compile 'org.apache.commons:commons-exec:1.3'
     compile 'net.sf.jopt-simple:jopt-simple:4.6'
     compile 'com.typesafe:config:1.3.0'
@@ -221,6 +230,8 @@ project(':kernel') {
     compile project(':sql-interpreter')
 
     testCompile "com.typesafe.akka:akka-testkit_$scalaVersion:$akkaVersion"
+    testCompile project(':protocol').sourceSets.test.output
+    testCompile project(':kernel-api').sourceSets.test.output
   }
 }
 

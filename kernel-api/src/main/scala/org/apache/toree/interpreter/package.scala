@@ -24,5 +24,8 @@ package object interpreter {
    * Represents the output from an interpret execution.
    */
   type ExecuteOutput = Map[String, String]
+  object ExecuteOutput {
+    def apply(data: (String, String)*): ExecuteOutput = Map(data:_*)
+  }
 
 }
