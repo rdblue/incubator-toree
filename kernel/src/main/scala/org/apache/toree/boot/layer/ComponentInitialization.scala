@@ -75,7 +75,8 @@ trait StandardComponentInitialization extends ComponentInitialization {
       initializeCommObjects(actorLoader)
 
     val interpreterManager =  InterpreterManager(config)
-    interpreterManager.interpreters foreach(println)
+    logger.info("Initialized InterpreterManager with interpreters: {}",
+      interpreterManager.interpreters.keys.mkString(", "))
 
     val dependencyDownloader = initializeDependencyDownloader(config)
     val pluginManager = createPluginManager(config, interpreterManager, dependencyDownloader)
