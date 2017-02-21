@@ -36,6 +36,7 @@ import org.apache.toree.kernel.protocol.v5.kernel.ActorLoader
 import org.apache.toree.kernel.protocol.v5.magic.MagicParser
 import org.apache.toree.kernel.protocol.v5.stream.KernelOutputStream
 import org.apache.toree.kernel.protocol.v5.{KMBuilder, KernelMessage}
+import org.apache.toree.kernel.protocol.v5.SparkKernelInfo
 import org.apache.toree.magic.MagicManager
 import org.apache.toree.plugins.PluginManager
 import org.apache.toree.utils.{KeyValuePairUtils, LogLike}
@@ -347,12 +348,6 @@ class Kernel (
     val sparkMaster = sconf.getOption("spark.master").getOrElse("not_set")
     logger.info( s"Connecting to spark.master $sparkMaster")
 
-    // TODO: Convert to events
-    pluginManager.dependencyManager.add(_sparkSession.sparkContext.getConf)
-    pluginManager.dependencyManager.add(_sparkSession)
-    pluginManager.dependencyManager.add(_sparkSession.sparkContext)
-    pluginManager.dependencyManager.add(javaSparkContext(_sparkSession))
-
     pluginManager.fireEvent(SparkReady)
 
     _sparkSession.sparkContext
@@ -366,7 +361,6 @@ class Kernel (
 
   // TODO: Think of a better way to test without exposing this
   protected[toree] def createSparkConf(conf: SparkConf) = {
-
     logger.info("Setting deployMode to client")
     conf.set("spark.submit.deployMode", "client")
     conf
@@ -397,7 +391,10 @@ class Kernel (
     interpreterManager.interpreters.get(name)
   }
 
-  override def sparkSession: SparkSession = SparkSession.builder.getOrCreate
+  private lazy val defaultSparkConf: SparkConf = createSparkConf(
+    new SparkConf().setAppName(SparkKernelInfo.banner))
+
+  override def sparkSession: SparkSession = SparkSession.builder.config(defaultSparkConf).getOrCreate
   override def sparkContext: SparkContext = sparkSession.sparkContext
   override def sqlContext: SQLContext = sparkSession.sqlContext
   override def sparkConf: SparkConf = sparkSession.sparkContext.getConf
