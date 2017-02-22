@@ -18,12 +18,12 @@
 package org.apache.toree.kernel.api
 
 import java.io.{InputStream, PrintStream}
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit, TimeoutException}
 import scala.collection.mutable
 import com.typesafe.config.Config
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{SparkContext, SparkConf}
 import org.apache.toree.annotations.Experimental
 import org.apache.toree.boot.layer.InterpreterManager
 import org.apache.toree.comm.CommManager
@@ -35,16 +35,17 @@ import org.apache.toree.kernel.protocol.v5
 import org.apache.toree.kernel.protocol.v5.kernel.ActorLoader
 import org.apache.toree.kernel.protocol.v5.magic.MagicParser
 import org.apache.toree.kernel.protocol.v5.stream.KernelOutputStream
-import org.apache.toree.kernel.protocol.v5.{KMBuilder, KernelMessage}
-import org.apache.toree.kernel.protocol.v5.SparkKernelInfo
+import org.apache.toree.kernel.protocol.v5.{KMBuilder, SparkKernelInfo, KernelMessage, MIMEType}
 import org.apache.toree.magic.MagicManager
 import org.apache.toree.plugins.PluginManager
 import org.apache.toree.utils.{KeyValuePairUtils, LogLike}
 import scala.language.dynamics
 import scala.reflect.runtime.universe._
-import scala.util.{DynamicVariable, Try}
+import scala.util.DynamicVariable
 import org.apache.spark.sql.SQLContext
 import org.apache.toree.plugins.SparkReady
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Future, Await}
 
 /**
  * Represents the main kernel API to be used for interaction.
@@ -394,7 +395,26 @@ class Kernel (
   private lazy val defaultSparkConf: SparkConf = createSparkConf(
     new SparkConf().setAppName(SparkKernelInfo.banner))
 
-  override def sparkSession: SparkSession = SparkSession.builder.config(defaultSparkConf).getOrCreate
+  override def sparkSession: SparkSession = {
+    // the first call to getOrCreate may create a session and take a long time,
+    // so this starts a future to get the session. if it take longer than 100 ms,
+    // then print a message to the user that Spark is starting.
+    import scala.concurrent.ExecutionContext.Implicits.global
+    val sessionFuture = Future {
+      SparkSession.builder.config(defaultSparkConf).getOrCreate
+    }
+
+    try {
+      Await.result(sessionFuture, Duration(100, TimeUnit.MILLISECONDS))
+    } catch {
+      case timeout: TimeoutException =>
+        // getting the session is taking a long time, so assume that Spark is
+        // starting and print a message
+        display.content(MIMEType.PlainText, "Waiting for a Spark session to start...")
+        Await.result(sessionFuture, Duration.Inf)
+    }
+  }
+
   override def sparkContext: SparkContext = sparkSession.sparkContext
   override def sqlContext: SQLContext = sparkSession.sqlContext
   override def sparkConf: SparkConf = sparkSession.sparkContext.getConf
