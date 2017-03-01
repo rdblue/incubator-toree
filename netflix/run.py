@@ -80,6 +80,13 @@ def main(args):
     # dsespark-submit will remove the first arg
     command_args = ['scala-kernel']
 
+    # add the user's spark properties, if present. this comes before spark CLI
+    # arguments so that properties set on the command line take precedence.
+    extra_properties_path = os.path.expanduser('~/.spark.properties')
+    if os.path.exists(extra_properties_path):
+        spark_shell_args.append('--extra-properties-file')
+        spark_shell_args.append(extra_properties_path)
+
     # add spark args
     command_args.extend(spark_env_opts.split() if spark_env_opts else [])
     command_args.extend(spark_args)
