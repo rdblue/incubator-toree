@@ -14,7 +14,7 @@ ${NEBULA_HOME}/gradlew toree-assembly:build
 STAGING_DIR=toree-${TOREE_VERSION}
 TARBALL=toree-${TOREE_VERSION}.tar.gz
 
-rm -r ${STAGING_DIR}
+[ -d ${STAGING_DIR} ] && rm -r ${STAGING_DIR} || true
 mkdir ${STAGING_DIR}
 cp toree-assembly/build/libs/toree-assembly-${TOREE_VERSION}.jar ${STAGING_DIR}
 cp netflix/run.py ${STAGING_DIR}
