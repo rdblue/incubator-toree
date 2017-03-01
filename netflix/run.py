@@ -54,13 +54,21 @@ def find_py4j(spark_home):
     except:
         return None
 
+def mkdir_p(dir_path, mode=0777):
+    if not os.path.exists(dir_path):
+        mkdir_p(os.path.dirname(dir_path))
+        if not os.path.exists(dir_path):
+            os.mkdir(dir_path, mode)
+
 def main(args):
     spark_args, toree_args = split_args(args)
     java_options, spark_args = get_value(spark_args, '--driver-java-options')
     driver_java_options = " ".join([ jarg for jarg in ["-noverify", java_options] if jarg ])
 
     work_path = os.getenv('CURRENT_JOB_WORKING_DIR')
-    log_path = work_path + "/spark.log"
+    # log to /var/log/spark to avoid logs disappearing when the kernel restarts
+    mkdir_p('/var/log/spark')
+    log_path = os.path.join('/var/log/spark', os.path.basename(work_path) + '.log')
     spark_home = os.getenv('SPARK_HOME')
     spark_env_opts = os.getenv('SPARK_OPTS')
     toree_assembly = os.getenv('TOREE_ASSEMBLY')
