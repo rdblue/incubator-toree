@@ -71,7 +71,6 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
   protected var settings: Settings = newSettings(List())
   settings = appendClassPath(settings)
 
-
   private val maxInterpreterThreads: Int = {
      if(config.hasPath("max_interpreter_threads"))
        config.getInt("max_interpreter_threads")
@@ -95,16 +94,15 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
 
      start()
      bindKernelVariable(kernel)
- 
+
+     // ensure bindings are defined before allowing user code to run
+     bindSparkSession()
+     bindSparkContext()
+     bindSqlContext()
+     defineImplicits()
+
      this
    }
-
-  override def postInit(): Unit = {
-    bindSparkSession()
-    bindSparkContext()
-    bindSqlContext()
-    defineImplicits()
-  }
 
    protected[scala] def buildClasspath(classLoader: ClassLoader): String = {
 
