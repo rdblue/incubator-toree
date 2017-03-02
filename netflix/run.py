@@ -92,8 +92,8 @@ def main(args):
     # arguments so that properties set on the command line take precedence.
     extra_properties_path = os.path.expanduser('~/.spark.properties')
     if os.path.exists(extra_properties_path):
-        spark_shell_args.append('--extra-properties-file')
-        spark_shell_args.append(extra_properties_path)
+        command_args.append('--extra-properties-file')
+        command_args.append(extra_properties_path)
 
     # add spark args
     command_args.extend(spark_env_opts.split() if spark_env_opts else [])
