@@ -66,9 +66,8 @@ def main(args):
     driver_java_options = " ".join([ jarg for jarg in ["-noverify", java_options] if jarg ])
 
     work_path = os.getenv('CURRENT_JOB_WORKING_DIR')
-    # log to /var/log/spark to avoid logs disappearing when the kernel restarts
-    mkdir_p('/var/log/spark')
-    log_path = os.path.join('/var/log/spark', os.path.basename(work_path) + '.log')
+    # log outside of the work path to avoid logs disappearing when the kernel restarts
+    log_path = os.path.join(os.path.dirname(work_path), os.path.basename(work_path) + '.log')
     spark_home = os.getenv('SPARK_HOME')
     spark_env_opts = os.getenv('SPARK_OPTS')
     toree_assembly = os.getenv('TOREE_ASSEMBLY')
