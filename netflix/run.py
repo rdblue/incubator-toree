@@ -94,7 +94,7 @@ def main(args):
         command_args.append('--extra-properties-file')
         command_args.append(extra_properties_path)
     else:
-        extra_properties_path = os.path.expanduser('~/notebooks/.spark.properties')
+        extra_properties_path = os.path.expanduser('~/notebooks/spark.properties')
         if os.path.exists(extra_properties_path):
             command_args.append('--extra-properties-file')
             command_args.append(extra_properties_path)
