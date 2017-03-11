@@ -18,7 +18,8 @@
 package org.apache.toree.kernel.api
 
 import java.io.{InputStream, PrintStream}
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit, TimeoutException}
+import java.net.URI
+import java.util.concurrent.{TimeoutException, ConcurrentHashMap, TimeUnit}
 import scala.collection.mutable
 import com.typesafe.config.Config
 import org.apache.spark.api.java.JavaSparkContext
@@ -63,6 +64,23 @@ class Kernel (
   val comm: CommManager,
   val pluginManager: PluginManager
 ) extends KernelLike with LogLike {
+
+  /**
+   * Jars that have been added to the kernel
+   */
+  private val jars = new mutable.ArrayBuffer[URI]()
+
+  override def addJars(uris: URI*): Unit = {
+    uris.foreach { uri =>
+      if (uri.getScheme != "file") {
+        throw new RuntimeException("Cannot add non-local jar: " + uri)
+      }
+    }
+
+    jars ++= uris
+    interpreter.addJars(uris.map(_.toURL):_*)
+    uris.foreach(uri => sparkContext.addJar(uri.getPath))
+  }
 
   /**
    * Represents the current input stream used by the kernel for the specific

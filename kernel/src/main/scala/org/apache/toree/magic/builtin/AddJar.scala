@@ -136,8 +136,7 @@ class AddJar
       val plugins = pluginManager.loadPlugins(fileDownloadLocation)
       pluginManager.initializePlugins(plugins)
     } else {
-      interpreter.addJars(fileDownloadLocation.toURI.toURL)
-      sparkContext.addJar(fileDownloadLocation.getCanonicalPath)
+      kernel.addJars(fileDownloadLocation.toURI)
     }
   }
 }
