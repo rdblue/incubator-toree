@@ -18,6 +18,7 @@ TARBALL=toree-${TOREE_VERSION}.tar.gz
 mkdir ${STAGING_DIR}
 cp toree-assembly/build/libs/toree-assembly-${TOREE_VERSION}.jar ${STAGING_DIR}
 cp netflix/run.py ${STAGING_DIR}
+cp netflix/run-console.py ${STAGING_DIR}
 
 tar czf ${TARBALL} ${STAGING_DIR}
 
