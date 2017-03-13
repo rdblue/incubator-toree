@@ -19,15 +19,13 @@ package org.apache.toree.kernel.interpreter.scala
 
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.ExecutionException
-
-import com.typesafe.config.{Config, ConfigFactory}
+import com.typesafe.config.{ConfigFactory, Config}
 import org.apache.spark.SparkContext
 import org.apache.spark.repl.Main
 import org.apache.spark.sql.SparkSession
-
 import org.apache.toree.interpreter._
 import org.apache.toree.kernel.api.KernelLike
-import org.apache.toree.utils.{MultiOutputStream, TaskManager}
+import org.apache.toree.utils.TaskManager
 import org.slf4j.LoggerFactory
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -36,13 +34,12 @@ import scala.language.reflectiveCalls
 import scala.tools.nsc.Settings
 import scala.tools.nsc.interpreter.{IR, OutputStream}
 import scala.tools.nsc.util.ClassPath
-
 import org.apache.spark.sql.SQLContext
-
 import org.apache.toree.kernel.protocol.v5.MIMEType
 import org.apache.toree.magic.MagicOutput
 import vegas.DSL.ExtendedUnitSpecBuilder
 import vegas.render.StaticHTMLRenderer
+import scala.util.Try
 
 
 class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends Interpreter with ScalaInterpreterSpecific {
@@ -224,7 +221,7 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
    registerDisplayer(classOf[Object], new Displayer[Object] {
      override def display(obj: Object): Map[String, String] = {
        val objAsString = String.valueOf(obj)
-       callToHTML(obj) match {
+       Try(callToHTML(obj)).toOption.flatten match {
          case Some(html) =>
            Map(
              MIMEType.PlainText -> objAsString,
