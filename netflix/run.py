@@ -63,6 +63,9 @@ def mkdir_p(dir_path, mode=0777):
 def main(args):
     spark_args, toree_args = split_args(args)
     java_options, spark_args = get_value(spark_args, '--driver-java-options')
+    # get --jars, split on comma, and filter empty values
+    jarArg, spark_args = get_value(spark_args, '--jars')
+    jars = [ jar for jar in jarArg.split(',') if jar ] if jarArg else []
     driver_java_options = " ".join([ jarg for jarg in ["-noverify", java_options] if jarg ])
 
     work_path = os.getenv('CURRENT_JOB_WORKING_DIR')
@@ -78,6 +81,8 @@ def main(args):
 
     if not toree_assembly:
         raise StandardError("TOREE_ASSEMBLY is not set")
+
+    jars.insert(0, toree_assembly)
 
     if not work_path:
         raise StandardError("CURRENT_JOB_WORKING_DIR is not set")
@@ -108,6 +113,8 @@ def main(args):
     command_args.append(driver_java_options)
     command_args.append("--deploy-mode")
     command_args.append("client")
+    command_args.append("--jars")
+    command_args.append(','.join(jars))
 
     # add toree args
     command_args.append("--class")
