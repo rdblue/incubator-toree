@@ -198,22 +198,12 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
 
   registerDisplayer(classOf[ExtendedUnitSpecBuilder],
      new Displayer[ExtendedUnitSpecBuilder] {
-       class StaticHTMLRendererHTTPS(json: String) extends StaticHTMLRenderer(json) {
-         override def importsHTML(additionalImports: String*): String = {
-           // use HTTPS instead of HTTP
-           (JSImports ++ additionalImports).map { s =>
-             val newURL = s.replaceFirst("^http:", "https:")
-             "<script src=\"" + newURL + "\" charset=\"utf-8\"></script>"
-           }.mkString("\n")
-         }
-       }
-
        override def display(plot: ExtendedUnitSpecBuilder): Map[String, String] = {
          val plotAsJson = plot.toJson
          Map(
            MIMEType.PlainText -> plotAsJson,
            MIMEType.ApplicationJson -> plotAsJson,
-           MIMEType.TextHtml -> new StaticHTMLRendererHTTPS(plotAsJson).frameHTML()
+           MIMEType.TextHtml -> new StaticHTMLRenderer(plotAsJson).frameHTML()
          )
        }
      })
@@ -252,14 +242,7 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
 
    protected def bindKernelVariable(kernel: KernelLike): Unit = {
      logger.warn(s"kernel variable: ${kernel}")
-//     InterpreterHelper.kernelLike = kernel
-//     interpret("import org.apache.toree.kernel.interpreter.scala.InterpreterHelper")
-//     interpret("import org.apache.toree.kernel.api.Kernel")
-//
-//     interpret(s"val kernel = InterpreterHelper.kernelLike.asInstanceOf[org.apache.toree.kernel.api.Kernel]")
-
      doQuietly {
-
        bind(
          "kernel", "org.apache.toree.kernel.api.Kernel",
          kernel, List( """@transient implicit""")
