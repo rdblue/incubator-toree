@@ -39,17 +39,11 @@ def main(args):
     java_options, spark_args = get_value(args, '--driver-java-options')
     driver_java_options = " ".join([ jarg for jarg in ["-noverify", java_options] if jarg ])
 
-    work_path = os.getenv('CURRENT_JOB_WORKING_DIR')
-
-    # the connection file path needs to be passed to both jupyter console and toree
-    connect_file_path = os.path.join(work_path, 'connect.json')
-
-    # log outside of the work path to avoid logs disappearing when the kernel restarts
-    log_path = os.path.join(os.path.dirname(work_path), os.path.basename(work_path) + '.log')
     spark_home = os.getenv('SPARK_HOME')
     spark_env_opts = os.getenv('SPARK_OPTS')
     toree_assembly = os.getenv('TOREE_ASSEMBLY')
     toree_env_opts = os.getenv('TOREE_OPTS')
+    work_path = os.getenv('CURRENT_JOB_WORKING_DIR')
 
     if not spark_home:
         raise StandardError("SPARK_HOME is not set")
@@ -59,6 +53,12 @@ def main(args):
 
     if not work_path:
         raise StandardError("CURRENT_JOB_WORKING_DIR is not set")
+
+    # the connection file path needs to be passed to both jupyter console and toree
+    connect_file_path = os.path.join(work_path, 'connect.json')
+
+    # log outside of the work path to avoid logs disappearing when the kernel restarts
+    log_path = os.path.join(os.path.dirname(work_path), os.path.basename(work_path) + '.log')
 
     # dsespark-submit will remove the first arg, scala-kernel
     kernel_cmd_args = ["{spark}/bin/dsespark-submit.py".format(spark=spark_home), 'scala-kernel']

@@ -68,13 +68,11 @@ def main(args):
     jars = [ jar for jar in jarArg.split(',') if jar ] if jarArg else []
     driver_java_options = " ".join([ jarg for jarg in ["-noverify", java_options] if jarg ])
 
-    work_path = os.getenv('CURRENT_JOB_WORKING_DIR')
-    # log outside of the work path to avoid logs disappearing when the kernel restarts
-    log_path = os.path.join(os.path.dirname(work_path), os.path.basename(work_path) + '.log')
     spark_home = os.getenv('SPARK_HOME')
     spark_env_opts = os.getenv('SPARK_OPTS')
     toree_assembly = os.getenv('TOREE_ASSEMBLY')
     toree_env_opts = os.getenv('TOREE_OPTS')
+    work_path = os.getenv('CURRENT_JOB_WORKING_DIR')
 
     if not spark_home:
         raise StandardError("SPARK_HOME is not set")
@@ -86,6 +84,9 @@ def main(args):
 
     if not work_path:
         raise StandardError("CURRENT_JOB_WORKING_DIR is not set")
+
+    # log outside of the work path to avoid logs disappearing when the kernel restarts
+    log_path = os.path.join(os.path.dirname(work_path), os.path.basename(work_path) + '.log')
 
     command = "{spark}/bin/dsespark-submit.py".format(spark=spark_home)
 
