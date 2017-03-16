@@ -47,7 +47,7 @@ object AddJar {
 }
 
 class AddJar
-  extends LineMagic with IncludeInterpreter with IncludeSparkContext
+  extends LineMagic with IncludeInterpreter
   with IncludeOutputStream with DownloadSupport with ArgumentParsingSupport
   with IncludeKernel with IncludePluginManager with IncludeConfig with LogLike
 {

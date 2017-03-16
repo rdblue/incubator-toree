@@ -30,7 +30,7 @@ import org.apache.toree.plugins.annotations.Event
 
 
 class AddDeps extends LineMagic with IncludeInterpreter
-  with IncludeOutputStream with IncludeSparkContext with ArgumentParsingSupport
+  with IncludeOutputStream with ArgumentParsingSupport
   with IncludeDependencyDownloader with IncludeKernel
 {
 
