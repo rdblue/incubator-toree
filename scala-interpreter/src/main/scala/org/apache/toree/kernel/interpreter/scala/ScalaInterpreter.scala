@@ -20,6 +20,7 @@ package org.apache.toree.kernel.interpreter.scala
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.ExecutionException
 import com.typesafe.config.{ConfigFactory, Config}
+import org.apache.hadoop.fs.FileSystem
 import org.apache.spark.SparkContext
 import org.apache.spark.repl.Main
 import org.apache.spark.sql.SparkSession
@@ -134,7 +135,7 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
 
    private lazy val displayers = new mutable.HashMap[Class[_], Displayer[_]]
 
-   def registerDisplayer[T](objClass: Class[T], displayer: Displayer[T]): Unit = {
+   override def registerDisplayer[T](objClass: Class[T], displayer: Displayer[T]): Unit = {
      displayers.put(objClass, displayer)
    }
 
@@ -157,31 +158,67 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
 
     registerDisplayer(classOf[SparkContext], new Displayer[SparkContext] {
      override def display(sc: SparkContext): Map[String, String] = {
+       val master = sc.getConf.get("spark.master")
        val appId = sc.applicationId
-       val webProxy = sc.hadoopConfiguration.get("yarn.web-proxy.address")
-       val masterHost = webProxy.split(":")(0)
        val logFile = sc.getConf.get("spark.log.path")
-       val html = s"""
-           |<ul>
-           |<li><a href="http://$webProxy/proxy/$appId" target="new_tab">Spark UI</a></li>
-           |<li><a href="http://$masterHost:8088/cluster/app/$appId" target="new_tab">Hadoop app: $appId</a></li>
-           |<li>Local logs are available using %tail_log</li>
-           |<li>Local logs are at: $logFile</li>
-           |</ul>
-         """.stripMargin
-       val text = s"""
-           |Spark $appId:
-           |* http://$webProxy/proxy/$appId
-           |* http://$masterHost:8088/cluster/app/$appId
-           |
-           |Local logs:
-           |* $logFile
-           |* Also available using %tail_log
-         """.stripMargin
-       Map(
-         MIMEType.PlainText -> text,
-         MIMEType.TextHtml -> html
-       )
+
+       if (master.startsWith("mesos")) {
+         val fs = FileSystem.get(sc.hadoopConfiguration).getUri
+         val master = fs.getHost.replace("hdfs", "master")
+         val sparkUI = sc.uiWebUrl.getOrElse("#")
+         val driverPort = sc.getConf.get("spark.driver.port")
+         val html =
+           s"""
+              |<ul>
+              |<li><a href="$sparkUI" target="new_tab">Spark UI</a></li>
+              |<li><a href="http://$master:5050/#/frameworks/$appId" target="new_tab">Mesos UI: $appId</a></li>
+              |<li>Local logs are available using %tail_log</li>
+              |<li>Local logs are at: $logFile</li>
+              |</ul>
+              |""".stripMargin
+         val text =
+           s"""
+              |Spark $appId:
+              |* $sparkUI
+              |* http://$master:5050/#/frameworks/$appId
+              |
+              |Local logs:
+              |* $logFile
+              |* Also available using %tail_log
+              |""".stripMargin
+
+         Map(
+           MIMEType.PlainText -> text,
+           MIMEType.TextHtml -> html
+         )
+       } else {
+         val webProxy = sc.hadoopConfiguration.get("yarn.web-proxy.address")
+         val masterHost = webProxy.split(":")(0)
+         val html =
+           s"""
+              |<ul>
+              |<li><a href="http://$webProxy/proxy/$appId" target="new_tab">Spark UI</a></li>
+              |<li><a href="http://$masterHost:8088/cluster/app/$appId" target="new_tab">Hadoop app: $appId</a></li>
+              |<li>Local logs are available using %tail_log</li>
+              |<li>Local logs are at: $logFile</li>
+              |</ul>
+              |""".stripMargin
+         val text =
+           s"""
+              |Spark $appId:
+              |* http://$webProxy/proxy/$appId
+              |* http://$masterHost:8088/cluster/app/$appId
+              |
+              |Local logs:
+              |* $logFile
+              |* Also available using %tail_log
+              |""".stripMargin
+
+         Map(
+           MIMEType.PlainText -> text,
+           MIMEType.TextHtml -> html
+         )
+       }
      }
    })
 

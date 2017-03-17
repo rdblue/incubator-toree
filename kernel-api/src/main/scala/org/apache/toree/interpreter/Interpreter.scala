@@ -145,6 +145,10 @@ trait Interpreter {
   /**
    * Initialization done after all other Toree initialization done.
    */
+  def postInit () = {}
 
-   def postInit () = {}
+  /**
+   * Registers a displayer for a class.
+   */
+  def registerDisplayer[T](objClass: Class[T], displayer: Displayer[T]): Unit = {}
 }
