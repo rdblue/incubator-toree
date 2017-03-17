@@ -32,9 +32,12 @@ class Tail_Log extends LineMagic
       case _ => 100
     }
 
-    Option(kernel.sparkContext) match {
-      case Some(sc) =>
-        val logFile = new File(sc.getConf.get(LOG_PATH_PROP))
+    val path = System.getProperty("sun.java.command")
+      .split(" ").find(_.startsWith("spark.log.path="))
+      .map(_.split("=", 2)(1)).map(new File(_))
+
+    path match {
+      case Some(logFile) =>
         if (logFile.exists && logFile.canRead) {
           var lines = new mutable.ListBuffer[String]
           val reader = new BufferedReader(new FileReader(logFile))
@@ -58,7 +61,7 @@ class Tail_Log extends LineMagic
           out.println("Cannot read log path: " + logFile)
         }
       case _ =>
-        out.println("Cannot get log path: sc is not defined")
+        out.println("Log path is not set")
     }
   }
 }
