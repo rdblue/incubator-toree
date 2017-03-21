@@ -61,7 +61,7 @@ def main(args):
     log_path = os.path.join(os.path.dirname(work_path), os.path.basename(work_path) + '.log')
 
     # dsespark-submit will remove the first arg, scala-kernel
-    kernel_cmd_args = ["{spark}/bin/dsespark-submit.py".format(spark=spark_home), 'scala-kernel']
+    kernel_cmd_args = ["{spark}/bin/dsespark-submit.py".format(spark=spark_home)]
 
     # add the user's spark properties, if present. this comes before spark CLI
     # arguments so that properties set on the command line take precedence.
@@ -94,7 +94,7 @@ def main(args):
     kernel_cmd_args.append(connect_file_path)
 
     # the Toree command is run by jupyter console. it is passed in as a python list.
-    kernel_cmd = repr(kernel_cmd_args)
+    kernel_cmd = repr(kernel_cmd_args).replace(' ', '')
 
     sys.stderr.write("\nSpark application log path: " + log_path + "\n\n")
 
@@ -102,9 +102,9 @@ def main(args):
     if py4j:
         os.environ['PYTHON_PATH'] = "{spark_home}/python:{spark_home}/python/lib/{py4j}".format(spark_home=spark_home, py4j=py4j)
 
-    command = 'jupyter'
+    command = '/usr/local/bin/jupyter'
 
-    command_args = ['console']
+    command_args = ['', 'console']
     command_args.append('--KernelManager.kernel_cmd=' + kernel_cmd)
     command_args.append('--ZMQTerminalIPythonApp.connection_file=' + connect_file_path)
 
