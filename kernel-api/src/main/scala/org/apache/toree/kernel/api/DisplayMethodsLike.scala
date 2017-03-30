@@ -31,6 +31,12 @@ trait DisplayMethodsLike {
   def content(mimeType: String, data: String): Unit
 
   /**
+   * Send a display message with multiple mime-type and content payloads
+   * @param data A map of mime-type to content to send for display
+   */
+  def content(data: Map[String, String]): Unit
+
+  /**
    * Send html content to the client
    * @param data The content to send for display
    */

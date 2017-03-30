@@ -75,7 +75,7 @@ class SqlInterpreter() extends Interpreter {
 
     val spark = kernel.sparkSession
 
-    val statements = code.split(";").filter(_.nonEmpty)
+    val statements = code.split(";").map(_.trim).filter(_.nonEmpty)
     val iter = statements.iterator
     var lastResult: (Result, Either[ExecuteOutput, ExecuteFailure]) =
       (Success, Left(Map.empty[String, String]))
@@ -88,10 +88,7 @@ class SqlInterpreter() extends Interpreter {
           // successful if result is success AND output isn't ExecuteFailure
           if (iter.hasNext) {
             // if there is another statement to run, display output from last
-            lastResult._2.left.get.foreach {
-              case (mime, content) =>
-                kernel.display.content(mime, content)
-            }
+            kernel.display.content(lastResult._2.left.get)
           }
         case _ =>
           // stop executing statements
@@ -148,6 +145,12 @@ class SqlInterpreter() extends Interpreter {
 
     Await.result(sqlFuture, Duration.Inf)
   }
+
+  /**
+   * Attempt to determine if a multiline block of code is complete
+   * @param code The code to determine for completeness
+   */
+  override def isComplete(code: String): (String, String) = super.isComplete(code)
 
   /**
    * Starts the interpreter, initializing any internal state.

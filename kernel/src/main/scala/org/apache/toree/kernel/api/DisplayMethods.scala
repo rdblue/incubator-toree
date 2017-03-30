@@ -45,6 +45,17 @@ class DisplayMethods(
     actorLoader.load(v5.SystemActorType.KernelMessageRelay) ! kernelMessage
   }
 
+  override def content(data: Map[String, String]): Unit = {
+    val displayData = v5.content.DisplayData("user", data, Map())
+
+    val kernelMessage = kmBuilder
+        .withIds(Seq(v5.content.DisplayData.toTypeString))
+        .withHeader(v5.content.DisplayData.toTypeString)
+        .withContentString(displayData).build
+
+    actorLoader.load(v5.SystemActorType.KernelMessageRelay) ! kernelMessage
+  }
+
   override def clear(wait: Boolean = false): Unit = {
     val clearOutput = v5.content.ClearOutput(wait)
 
