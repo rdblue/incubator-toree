@@ -23,6 +23,7 @@ import com.typesafe.config.{ConfigFactory, Config}
 import org.apache.hadoop.fs.FileSystem
 import org.apache.spark.SparkContext
 import org.apache.spark.repl.Main
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.SparkSession
 import org.apache.toree.interpreter._
 import org.apache.toree.kernel.api.KernelLike
@@ -38,6 +39,7 @@ import scala.tools.nsc.util.ClassPath
 import org.apache.spark.sql.SQLContext
 import org.apache.toree.kernel.protocol.v5.MIMEType
 import org.apache.toree.magic.MagicOutput
+import org.apache.toree.utils.DisplayHelpers
 import vegas.DSL.ExtendedUnitSpecBuilder
 import vegas.render.StaticHTMLRenderer
 import scala.util.Try
@@ -133,94 +135,115 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
      }
    }
 
-   private lazy val displayers = new mutable.HashMap[Class[_], Displayer[_]]
+  private lazy val displayers = new mutable.HashMap[Class[_], Displayer[_]]
 
-   override def registerDisplayer[T](objClass: Class[T], displayer: Displayer[T]): Unit = {
-     displayers.put(objClass, displayer)
-   }
+  override def registerDisplayer[T](objClass: Class[T], displayer: Displayer[T]): Unit = {
+    displayers.put(objClass, displayer)
+  }
 
-   protected def getDisplayer[T](obj: T): Option[Displayer[_ >: T]] = {
-     var objClass: Class[_ >: T] = obj.getClass.asInstanceOf[Class[_ >: T]]
-     while (objClass != classOf[Object]) {
-       displayers.get(objClass) match {
-         case Some(displayer) =>
-           return Some(displayer.asInstanceOf[Displayer[_ >: T]])
-         case None =>
-       }
-       objClass = objClass.getSuperclass
-     }
-     Some(displayers(classOf[Object]).asInstanceOf[Displayer[_ >: T]])
-   }
+  protected def getDisplayer[T](obj: T): Option[Displayer[_ >: T]] = {
+    var objClass: Class[_ >: T] = obj.getClass.asInstanceOf[Class[_ >: T]]
+    while (objClass != classOf[Object]) {
+      displayers.get(objClass) match {
+        case Some(displayer) =>
+          return Some(displayer.asInstanceOf[Displayer[_ >: T]])
+        case None =>
+      }
+      objClass = objClass.getSuperclass
+    }
+    Some(displayers(classOf[Object]).asInstanceOf[Displayer[_ >: T]])
+  }
+
+  registerDisplayer(classOf[Array[_]], new Displayer[Array[_]] {
+    override def display(arr: Array[_]): Map[String, String] = {
+      if (arr.length < 1) {
+        return Map(MIMEType.PlainText -> "Array([])")
+      }
+
+      val firstNonNull = arr.find(_ != null)
+      firstNonNull match {
+        case Some(element) if element.isInstanceOf[Row] =>
+          val (text, html) = DisplayHelpers.displayRows(
+            arr.asInstanceOf[Array[Row]])
+          Map(MIMEType.PlainText -> text, MIMEType.TextHtml -> html)
+
+        case _ =>
+          Map(MIMEType.PlainText -> arr.map(
+            elem => ScalaInterpreter.this.display(elem).get(MIMEType.PlainText)
+          ).mkString("[", ", ", "]"))
+      }
+    }
+  })
 
   registerDisplayer(classOf[MagicOutput], new Displayer[MagicOutput] {
     override def display(data: MagicOutput): Map[String, String] = data.asMap
   })
 
-    registerDisplayer(classOf[SparkContext], new Displayer[SparkContext] {
-     override def display(sc: SparkContext): Map[String, String] = {
-       val master = sc.getConf.get("spark.master")
-       val appId = sc.applicationId
-       val logFile = sc.getConf.get("spark.log.path")
+  registerDisplayer(classOf[SparkContext], new Displayer[SparkContext] {
+    override def display(sc: SparkContext): Map[String, String] = {
+      val master = sc.getConf.get("spark.master")
+      val appId = sc.applicationId
+      val logFile = sc.getConf.get("spark.log.path")
 
-       if (master.startsWith("mesos")) {
-         val fs = FileSystem.get(sc.hadoopConfiguration).getUri
-         val master = fs.getHost.replace("hdfs", "master")
-         val sparkUI = sc.uiWebUrl.getOrElse("#")
-         val driverPort = sc.getConf.get("spark.driver.port")
-         val html =
-           s"""
-              |<ul>
-              |<li><a href="$sparkUI" target="new_tab">Spark UI</a></li>
-              |<li><a href="http://$master:5050/#/frameworks/$appId" target="new_tab">Mesos UI: $appId</a></li>
-              |<li>Local logs are available using %tail_log</li>
-              |<li>Local logs are at: $logFile</li>
-              |</ul>
-              |""".stripMargin
-         val text =
-           s"""
-              |Spark $appId:
-              |* $sparkUI
-              |* http://$master:5050/#/frameworks/$appId
-              |
+      if (master.startsWith("mesos")) {
+        val fs = FileSystem.get(sc.hadoopConfiguration).getUri
+        val master = fs.getHost.replace("hdfs", "master")
+        val sparkUI = sc.uiWebUrl.getOrElse("#")
+        val driverPort = sc.getConf.get("spark.driver.port")
+        val html =
+          s"""
+             |<ul>
+             |<li><a href="$sparkUI" target="new_tab">Spark UI</a></li>
+             |<li><a href="http://$master:5050/#/frameworks/$appId" target="new_tab">Mesos UI: $appId</a></li>
+             |<li>Local logs are available using %tail_log</li>
+             |<li>Local logs are at: $logFile</li>
+             |</ul>
+             |""".stripMargin
+        val text =
+          s"""
+             |Spark $appId:
+             |* $sparkUI
+             |* http://$master:5050/#/frameworks/$appId
+             |
               |Local logs:
-              |* $logFile
-              |* Also available using %tail_log
-              |""".stripMargin
+             |* $logFile
+             |* Also available using %tail_log
+             |""".stripMargin
 
-         Map(
-           MIMEType.PlainText -> text,
-           MIMEType.TextHtml -> html
-         )
-       } else {
-         val webProxy = sc.hadoopConfiguration.get("yarn.web-proxy.address")
-         val masterHost = webProxy.split(":")(0)
-         val html =
-           s"""
-              |<ul>
-              |<li><a href="http://$webProxy/proxy/$appId" target="new_tab">Spark UI</a></li>
-              |<li><a href="http://$masterHost:8088/cluster/app/$appId" target="new_tab">Hadoop app: $appId</a></li>
-              |<li>Local logs are available using %tail_log</li>
-              |<li>Local logs are at: $logFile</li>
-              |</ul>
-              |""".stripMargin
-         val text =
-           s"""
-              |Spark $appId:
-              |* http://$webProxy/proxy/$appId
-              |* http://$masterHost:8088/cluster/app/$appId
-              |
+        Map(
+          MIMEType.PlainText -> text,
+          MIMEType.TextHtml -> html
+        )
+      } else {
+        val webProxy = sc.hadoopConfiguration.get("yarn.web-proxy.address")
+        val masterHost = webProxy.split(":")(0)
+        val html =
+          s"""
+             |<ul>
+             |<li><a href="http://$webProxy/proxy/$appId" target="new_tab">Spark UI</a></li>
+             |<li><a href="http://$masterHost:8088/cluster/app/$appId" target="new_tab">Hadoop app: $appId</a></li>
+             |<li>Local logs are available using %tail_log</li>
+             |<li>Local logs are at: $logFile</li>
+             |</ul>
+             |""".stripMargin
+        val text =
+          s"""
+             |Spark $appId:
+             |* http://$webProxy/proxy/$appId
+             |* http://$masterHost:8088/cluster/app/$appId
+             |
               |Local logs:
-              |* $logFile
-              |* Also available using %tail_log
-              |""".stripMargin
+             |* $logFile
+             |* Also available using %tail_log
+             |""".stripMargin
 
-         Map(
-           MIMEType.PlainText -> text,
-           MIMEType.TextHtml -> html
-         )
-       }
-     }
-   })
+        Map(
+          MIMEType.PlainText -> text,
+          MIMEType.TextHtml -> html
+        )
+      }
+    }
+  })
 
   registerDisplayer(classOf[SparkSession], new Displayer[SparkSession] {
     override def display(spark: SparkSession): Map[String, String] = {
@@ -234,44 +257,44 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
   })
 
   registerDisplayer(classOf[ExtendedUnitSpecBuilder],
-     new Displayer[ExtendedUnitSpecBuilder] {
-       override def display(plot: ExtendedUnitSpecBuilder): Map[String, String] = {
-         val plotAsJson = plot.toJson
-         Map(
-           MIMEType.PlainText -> plotAsJson,
-           MIMEType.ApplicationJson -> plotAsJson,
-           MIMEType.TextHtml -> new StaticHTMLRenderer(plotAsJson).frameHTML()
-         )
-       }
-     })
+    new Displayer[ExtendedUnitSpecBuilder] {
+      override def display(plot: ExtendedUnitSpecBuilder): Map[String, String] = {
+        val plotAsJson = plot.toJson
+        Map(
+          MIMEType.PlainText -> plotAsJson,
+          MIMEType.ApplicationJson -> plotAsJson,
+          MIMEType.TextHtml -> new StaticHTMLRenderer(plotAsJson).frameHTML()
+        )
+      }
+    })
 
-   registerDisplayer(classOf[Object], new Displayer[Object] {
-     override def display(obj: Object): Map[String, String] = {
-       val objAsString = String.valueOf(obj)
-       Try(callToHTML(obj)).toOption.flatten match {
-         case Some(html) =>
-           Map(
-             MIMEType.PlainText -> objAsString,
-             MIMEType.TextHtml -> html
-           )
-         case None =>
-           Map(MIMEType.PlainText -> objAsString)
-       }
-     }
+  registerDisplayer(classOf[Object], new Displayer[Object] {
+    override def display(obj: Object): Map[String, String] = {
+      val objAsString = String.valueOf(obj)
+      Try(callToHTML(obj)).toOption.flatten match {
+        case Some(html) =>
+          Map(
+            MIMEType.PlainText -> objAsString,
+            MIMEType.TextHtml -> html
+          )
+        case None =>
+          Map(MIMEType.PlainText -> objAsString)
+      }
+    }
 
-     private def callToHTML(obj: Any): Option[String] = {
-       import scala.reflect.runtime.{universe => ru}
-       val toHtmlMethodName = ru.TermName("toHtml")
-       val classMirror = ru.runtimeMirror(obj.getClass.getClassLoader)
-       val objMirror = classMirror.reflect(obj)
-       val toHtmlSym = objMirror.symbol.toType.member(toHtmlMethodName)
-       if (toHtmlSym.isMethod) {
-         Option(String.valueOf(objMirror.reflectMethod(toHtmlSym.asMethod).apply()))
-       } else {
-         None
-       }
-     }
-   })
+    private def callToHTML(obj: Any): Option[String] = {
+      import scala.reflect.runtime.{universe => ru}
+      val toHtmlMethodName = ru.TermName("toHtml")
+      val classMirror = ru.runtimeMirror(obj.getClass.getClassLoader)
+      val objMirror = classMirror.reflect(obj)
+      val toHtmlSym = objMirror.symbol.toType.member(toHtmlMethodName)
+      if (toHtmlSym.isMethod) {
+        Option(String.valueOf(objMirror.reflectMethod(toHtmlSym.asMethod).apply()))
+      } else {
+        None
+      }
+    }
+  })
 
    protected def maxInterpreterThreads(kernel: KernelLike): Int = {
      kernel.config.getInt("max_interpreter_threads")
@@ -345,6 +368,10 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
         // do nothing with the line
 
       case line if lastResultAsString.contains(line) =>
+        // do nothing with the line
+
+      case line if line.endsWith("...") &&
+          lastResultAsString.contains(line.substring(0, line.length - 3)) =>
         // do nothing with the line
 
       case line =>
@@ -494,6 +521,7 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
         |}
         |
         |import implicits._
+        |import org.apache.spark.sql.functions._
       """.stripMargin
     doQuietly(interpret(code))
   }

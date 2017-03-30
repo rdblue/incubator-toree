@@ -3,9 +3,15 @@ allprojects {
 }
 
 buildscript {
-  repositories { jcenter() }
+  repositories {
+    jcenter()
+    maven {
+      url "https://plugins.gradle.org/m2/"
+    }
+  }
   dependencies {
     classpath 'com.github.jengelman.gradle.plugins:shadow:1.2.4'
+    classpath "gradle.plugin.com.github.maiflai:gradle-scalatest:0.13"
   }
 }
 
@@ -26,6 +32,7 @@ subprojects {
   apply plugin: 'nebula.source-jar'
   apply plugin: 'maven' // make pom files for deployment
   apply plugin: 'com.github.johnrengelman.shadow'
+  apply plugin: "com.github.maiflai.scalatest"
 
   group = "org.apache.toree.kernel"
   version = '0.2.0'
@@ -86,6 +93,7 @@ subprojects {
     provided "org.apache.spark:spark-repl_$scalaVersion:$sparkVersion"
 
     testCompile "org.scalatest:scalatest_$scalaVersion:2.2.6"
+    testRuntime 'org.pegdown:pegdown:1.4.2'
     testCompile 'org.mockito:mockito-all:1.10.19'
     testCompile 'com.fasterxml.jackson.core:jackson-databind:2.6.5'
   }
