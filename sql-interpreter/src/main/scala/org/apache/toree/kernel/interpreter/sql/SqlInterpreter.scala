@@ -48,7 +48,7 @@ class SqlInterpreter() extends Interpreter {
   private val executor = Executors.newSingleThreadExecutor(
     new ThreadFactoryBuilder()
         .setDaemon(true)
-        .setNameFormat("s3-committer-pool-%d")
+        .setNameFormat("sql-interpreter-pool-%d")
         .build)
 
   private var kernel: KernelLike = _
@@ -75,6 +75,7 @@ class SqlInterpreter() extends Interpreter {
 
     val spark = kernel.sparkSession
 
+    // TODO: this should use a real tokenizer
     val statements = code.split(";").map(_.trim).filter(_.nonEmpty)
     val iter = statements.iterator
     var lastResult: (Result, Either[ExecuteOutput, ExecuteFailure]) =
@@ -145,6 +146,15 @@ class SqlInterpreter() extends Interpreter {
 
     Await.result(sqlFuture, Duration.Inf)
   }
+
+  /**
+   * Attempts to perform code completion via the <TAB> command.
+   *
+   * @param code The current cell to complete
+   * @param pos  The cursor position
+   * @return The cursor position and list of possible completions
+   */
+  override def completion(code: String, pos: Int): (Int, List[String]) = super.completion(code, pos)
 
   /**
    * Attempt to determine if a multiline block of code is complete

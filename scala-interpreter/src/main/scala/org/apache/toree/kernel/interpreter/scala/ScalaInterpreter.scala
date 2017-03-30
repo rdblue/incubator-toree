@@ -154,24 +154,10 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
     Some(displayers(classOf[Object]).asInstanceOf[Displayer[_ >: T]])
   }
 
-  registerDisplayer(classOf[Array[_]], new Displayer[Array[_]] {
-    override def display(arr: Array[_]): Map[String, String] = {
-      if (arr.length < 1) {
-        return Map(MIMEType.PlainText -> "Array([])")
-      }
-
-      val firstNonNull = arr.find(_ != null)
-      firstNonNull match {
-        case Some(element) if element.isInstanceOf[Row] =>
-          val (text, html) = DisplayHelpers.displayRows(
-            arr.asInstanceOf[Array[Row]])
-          Map(MIMEType.PlainText -> text, MIMEType.TextHtml -> html)
-
-        case _ =>
-          Map(MIMEType.PlainText -> arr.map(
-            elem => ScalaInterpreter.this.display(elem).get(MIMEType.PlainText)
-          ).mkString("[", ", ", "]"))
-      }
+  registerDisplayer(classOf[Array[Row]], new Displayer[Array[Row]] {
+    override def display(arr: Array[Row]): Map[String, String] = {
+      val (text, html) = DisplayHelpers.displayRows(arr)
+      Map(MIMEType.PlainText -> text, MIMEType.TextHtml -> html)
     }
   })
 
@@ -270,15 +256,21 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
 
   registerDisplayer(classOf[Object], new Displayer[Object] {
     override def display(obj: Object): Map[String, String] = {
-      val objAsString = String.valueOf(obj)
-      Try(callToHTML(obj)).toOption.flatten match {
-        case Some(html) =>
-          Map(
-            MIMEType.PlainText -> objAsString,
-            MIMEType.TextHtml -> html
-          )
-        case None =>
-          Map(MIMEType.PlainText -> objAsString)
+      if (obj.getClass.isArray) {
+        Map(MIMEType.PlainText -> obj.asInstanceOf[Array[_]].map(
+          elem => ScalaInterpreter.this.display(elem).get(MIMEType.PlainText)
+        ).mkString("[", ", ", "]"))
+      } else {
+        val objAsString = String.valueOf(obj)
+        Try(callToHTML(obj)).toOption.flatten match {
+          case Some(html) =>
+            Map(
+              MIMEType.PlainText -> objAsString,
+              MIMEType.TextHtml -> html
+            )
+          case None =>
+            Map(MIMEType.PlainText -> objAsString)
+        }
       }
     }
 
