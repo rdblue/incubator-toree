@@ -33,9 +33,13 @@ import scala.concurrent.duration._
 import scala.tools.nsc.interpreter.{InputStream, OutputStream}
 
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.Command
+import org.apache.spark.sql.types.StructType
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
+import org.apache.toree.interpreter.Results.Success
 
 /**
  * Represents an interpreter interface to Spark SQL.
@@ -70,12 +74,40 @@ class SqlInterpreter() extends Interpreter {
     (Result, Either[ExecuteOutput, ExecuteFailure]) = {
 
     val spark = kernel.sparkSession
-    val varName = nextVar
 
+    val statements = code.split(";").filter(_.nonEmpty)
+    val iter = statements.iterator
+    var lastResult: (Result, Either[ExecuteOutput, ExecuteFailure]) =
+      (Success, Left(Map.empty[String, String]))
+    var failed = false
+    while (iter.hasNext && !failed) {
+      val sql = iter.next
+      lastResult = runStatement(sql, spark)
+      lastResult._1 match {
+        case Success if lastResult._2.isLeft =>
+          // successful if result is success AND output isn't ExecuteFailure
+          if (iter.hasNext) {
+            // if there is another statement to run, display output from last
+            lastResult._2.left.get.foreach {
+              case (mime, content) =>
+                kernel.display.content(mime, content)
+            }
+          }
+        case _ =>
+          // stop executing statements
+          failed = true
+      }
+    }
+
+    lastResult
+  }
+
+  private def runStatement(sql: String, spark: SparkSession): (Result, Either[ExecuteOutput, ExecuteFailure]) = {
+    val varName = nextVar
     this.lastVar = Some(varName)
 
-    val execution = Future {
-      val resultDF = spark.sql(code)
+    val execution: Future[Option[(StructType, Array[Row])]] = Future {
+      val resultDF = spark.sql(sql)
 
       // save the query for later use
       queries.put(varName, resultDF)
@@ -83,8 +115,8 @@ class SqlInterpreter() extends Interpreter {
       // determine the query type
       val logicalPlan = resultDF.queryExecution.logical
       if (logicalPlan.isInstanceOf[Command]) {
-        resultDF.queryExecution.sparkPlan.execute()
-        None
+        //resultDF.queryExecution.sparkPlan.execute()
+        Some((resultDF.schema, resultDF.take(1001)))
       } else {
         // let Spark format the rows as a string
         Some((resultDF.schema, resultDF.take(1001)))
