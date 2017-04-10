@@ -19,18 +19,16 @@ package org.apache.toree.kernel.interpreter.scala
 
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.ExecutionException
-import com.typesafe.config.{ConfigFactory, Config}
-import org.apache.hadoop.fs.FileSystem
+import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.spark.SparkContext
 import org.apache.spark.repl.Main
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.SparkSession
 import org.apache.toree.interpreter._
 import org.apache.toree.kernel.api.KernelLike
 import org.apache.toree.utils.TaskManager
 import org.slf4j.LoggerFactory
 import scala.annotation.tailrec
-import scala.collection.mutable
+import scala.collection.JavaConverters._
 import scala.concurrent.{Await, Future}
 import scala.language.reflectiveCalls
 import scala.tools.nsc.Settings
@@ -38,15 +36,13 @@ import scala.tools.nsc.interpreter.{IR, OutputStream}
 import scala.tools.nsc.util.ClassPath
 import org.apache.spark.sql.SQLContext
 import org.apache.toree.kernel.protocol.v5.MIMEType
-import org.apache.toree.magic.MagicOutput
-import org.apache.toree.utils.DisplayHelpers
-import vegas.DSL.ExtendedUnitSpecBuilder
-import vegas.render.StaticHTMLRenderer
-import scala.util.Try
+import jupyter.Displayers
 
 
 class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends Interpreter with ScalaInterpreterSpecific {
   import ScalaInterpreter._
+
+  ScalaDisplayers.ensureLoaded()
 
    private var kernel: KernelLike = _
 
@@ -134,159 +130,6 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
        kernel.config.getStringList("interpreter_args").asScala.toList
      }
    }
-
-  private lazy val displayers = new mutable.HashMap[Class[_], Displayer[_]]
-
-  override def registerDisplayer[T](objClass: Class[T], displayer: Displayer[T]): Unit = {
-    displayers.put(objClass, displayer)
-  }
-
-  protected def getDisplayer[T](obj: T): Option[Displayer[_ >: T]] = {
-    var objClass: Class[_ >: T] = obj.getClass.asInstanceOf[Class[_ >: T]]
-    while (objClass != classOf[Object]) {
-      displayers.get(objClass) match {
-        case Some(displayer) =>
-          return Some(displayer.asInstanceOf[Displayer[_ >: T]])
-        case None =>
-      }
-      objClass = objClass.getSuperclass
-    }
-    Some(displayers(classOf[Object]).asInstanceOf[Displayer[_ >: T]])
-  }
-
-  registerDisplayer(classOf[Array[Row]], new Displayer[Array[Row]] {
-    override def display(arr: Array[Row]): Map[String, String] = {
-      val (text, html) = DisplayHelpers.displayRows(arr)
-      Map(MIMEType.PlainText -> text, MIMEType.TextHtml -> html)
-    }
-  })
-
-  registerDisplayer(classOf[MagicOutput], new Displayer[MagicOutput] {
-    override def display(data: MagicOutput): Map[String, String] = data.asMap
-  })
-
-  registerDisplayer(classOf[SparkContext], new Displayer[SparkContext] {
-    override def display(sc: SparkContext): Map[String, String] = {
-      val master = sc.getConf.get("spark.master")
-      val appId = sc.applicationId
-      val logFile = sc.getConf.get("spark.log.path")
-
-      if (master.startsWith("mesos")) {
-        val fs = FileSystem.get(sc.hadoopConfiguration).getUri
-        val master = fs.getHost.replace("hdfs", "master")
-        val sparkUI = sc.uiWebUrl.getOrElse("#")
-        val driverPort = sc.getConf.get("spark.driver.port")
-        val html =
-          s"""
-             |<ul>
-             |<li><a href="$sparkUI" target="new_tab">Spark UI</a></li>
-             |<li><a href="http://$master:5050/#/frameworks/$appId" target="new_tab">Mesos UI: $appId</a></li>
-             |<li>Local logs are available using %tail_log</li>
-             |<li>Local logs are at: $logFile</li>
-             |</ul>
-             |""".stripMargin
-        val text =
-          s"""
-             |Spark $appId:
-             |* $sparkUI
-             |* http://$master:5050/#/frameworks/$appId
-             |
-              |Local logs:
-             |* $logFile
-             |* Also available using %tail_log
-             |""".stripMargin
-
-        Map(
-          MIMEType.PlainText -> text,
-          MIMEType.TextHtml -> html
-        )
-      } else {
-        val webProxy = sc.hadoopConfiguration.get("yarn.web-proxy.address")
-        val masterHost = webProxy.split(":")(0)
-        val html =
-          s"""
-             |<ul>
-             |<li><a href="http://$webProxy/proxy/$appId" target="new_tab">Spark UI</a></li>
-             |<li><a href="http://$masterHost:8088/cluster/app/$appId" target="new_tab">Hadoop app: $appId</a></li>
-             |<li>Local logs are available using %tail_log</li>
-             |<li>Local logs are at: $logFile</li>
-             |</ul>
-             |""".stripMargin
-        val text =
-          s"""
-             |Spark $appId:
-             |* http://$webProxy/proxy/$appId
-             |* http://$masterHost:8088/cluster/app/$appId
-             |
-              |Local logs:
-             |* $logFile
-             |* Also available using %tail_log
-             |""".stripMargin
-
-        Map(
-          MIMEType.PlainText -> text,
-          MIMEType.TextHtml -> html
-        )
-      }
-    }
-  })
-
-  registerDisplayer(classOf[SparkSession], new Displayer[SparkSession] {
-    override def display(spark: SparkSession): Map[String, String] = {
-      getDisplayer(spark.sparkContext) match {
-        case Some(displayer) =>
-          displayer.display(spark.sparkContext)
-        case _ =>
-          Map(MIMEType.PlainText -> String.valueOf(spark))
-      }
-    }
-  })
-
-  registerDisplayer(classOf[ExtendedUnitSpecBuilder],
-    new Displayer[ExtendedUnitSpecBuilder] {
-      override def display(plot: ExtendedUnitSpecBuilder): Map[String, String] = {
-        val plotAsJson = plot.toJson
-        Map(
-          MIMEType.PlainText -> plotAsJson,
-          MIMEType.ApplicationJson -> plotAsJson,
-          MIMEType.TextHtml -> new StaticHTMLRenderer(plotAsJson).frameHTML()
-        )
-      }
-    })
-
-  registerDisplayer(classOf[Object], new Displayer[Object] {
-    override def display(obj: Object): Map[String, String] = {
-      if (obj.getClass.isArray) {
-        Map(MIMEType.PlainText -> obj.asInstanceOf[Array[_]].map(
-          elem => ScalaInterpreter.this.display(elem).get(MIMEType.PlainText)
-        ).mkString("[", ", ", "]"))
-      } else {
-        val objAsString = String.valueOf(obj)
-        Try(callToHTML(obj)).toOption.flatten match {
-          case Some(html) =>
-            Map(
-              MIMEType.PlainText -> objAsString,
-              MIMEType.TextHtml -> html
-            )
-          case None =>
-            Map(MIMEType.PlainText -> objAsString)
-        }
-      }
-    }
-
-    private def callToHTML(obj: Any): Option[String] = {
-      import scala.reflect.runtime.{universe => ru}
-      val toHtmlMethodName = ru.TermName("toHtml")
-      val classMirror = ru.runtimeMirror(obj.getClass.getClassLoader)
-      val objMirror = classMirror.reflect(obj)
-      val toHtmlSym = objMirror.symbol.toType.member(toHtmlMethodName)
-      if (toHtmlSym.isMethod) {
-        Option(String.valueOf(objMirror.reflectMethod(toHtmlSym.asMethod).apply()))
-      } else {
-        None
-      }
-    }
-  })
 
    protected def maxInterpreterThreads(kernel: KernelLike): Int = {
      kernel.config.getInt("max_interpreter_threads")
@@ -408,32 +251,6 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
      }
    }
 
-   protected def display(obj: Any): Map[String, String] = {
-     obj match {
-       case option: Option[Any] =>
-         option match {
-           case Some(ref) =>
-             display(ref)
-           case None =>
-             Map()
-         }
-       case _ =>
-         getDisplayer(obj) match {
-           case Some(displayer) =>
-             try {
-               displayer.display(obj)
-             } catch {
-               case e: Exception =>
-                 logger.error("Error calling displayer %s on %s".format(
-                     displayer.getClass.getName, String.valueOf(obj)), e)
-                 Map(MIMEType.PlainText -> String.valueOf(obj))
-             }
-           case None =>
-             Map(MIMEType.PlainText -> String.valueOf(obj))
-         }
-     }
-   }
-
    protected def interpretMapToResultAndOutput(future: Future[Results.Result]) = {
      import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -445,7 +262,7 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
          val (obj, defStr, text) = prepareResult(lastOutput)
          defStr.foreach(kernel.display.content(MIMEType.PlainText, _))
          text.foreach(kernel.display.content(MIMEType.PlainText, _))
-         val output = display(obj)
+         val output = obj.map(Displayers.display(_).asScala.toMap).getOrElse(Map.empty)
          (result, Left(output))
 
        case Results.Error =>

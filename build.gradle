@@ -20,6 +20,9 @@ subprojects {
     mavenLocal()
     mavenCentral()
     maven {
+      url "https://jitpack.io"
+    }
+    maven {
       url "http://repository.apache.org/snapshots/"
     }
     maven {
@@ -195,6 +198,7 @@ project(':scala-interpreter') {
     compile project(':protocol')
     compile project(':kernel-api')
 
+    compile 'com.github.jupyter:jvm-repr:0.1.0'
     compile("org.vegas-viz:vegas-spark_$scalaVersion:0.3.8") {
       exclude module: 'org.scala-lang'
     }
