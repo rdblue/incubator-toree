@@ -94,7 +94,7 @@ def main(args):
     kernel_cmd_args.append(connect_file_path)
 
     # the Toree command is run by jupyter console. it is passed in as a python list.
-    kernel_cmd = repr(kernel_cmd_args).replace(' ', '')
+    kernel_cmd = '[' + ','.join([ repr(arg) for arg in kernel_cmd_args ]) + ']'
 
     sys.stderr.write("\nSpark application log path: " + log_path + "\n\n")
 
