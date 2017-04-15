@@ -115,7 +115,8 @@ object ScalaDisplayers {
       option match {
         case Some(wrapped) =>
           Displayers.display(wrapped).asScala.foreach {
-            case (mime, text) if mime == MIMETypes.TEXT =>
+            case (mime, text) if mime == MIMETypes.TEXT && text.indexOf("\n") < 0 =>
+              // only adds Some() to single-line result text
               result.put(mime, "Some(" + text + ")")
             case (mime, value) =>
               result.put(mime, value)

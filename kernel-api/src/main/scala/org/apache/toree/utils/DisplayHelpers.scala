@@ -7,6 +7,7 @@ import org.apache.spark.sql.Row
 object DisplayHelpers {
   def displayRows(
         rows: Array[Row],
+        name: Option[String] = None,
         fields: Option[Seq[String]] = None,
         isTruncated: Boolean = false): (String, String) = {
     if (rows.length < 1) {
@@ -55,6 +56,12 @@ object DisplayHelpers {
     val format = lengths.map(l => s" %-${l}s ").mkString("|", "|", "|")
     lines += divider
 
+    name match {
+      case Some(varName) =>
+        htmlLines += s"<tr><th colspan=${lengths.length}>$varName</th></tr>"
+      case _ =>
+    }
+
     fields match {
       case Some(names) =>
         htmlLines += names.mkString("<tr><th>", "</th><th>", "</th></tr>")
@@ -76,6 +83,12 @@ object DisplayHelpers {
 
     htmlLines += "</table>"
     lines += divider
+
+    name match {
+      case Some(varName) =>
+        lines += s"  available as $varName"
+      case _ =>
+    }
 
     (lines.mkString("\n"), htmlLines.mkString("\n"))
   }

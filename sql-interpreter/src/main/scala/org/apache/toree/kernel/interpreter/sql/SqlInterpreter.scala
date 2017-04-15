@@ -50,8 +50,10 @@ class SqlInterpreter() extends Interpreter {
         .setDaemon(true)
         .setNameFormat("sql-interpreter-pool-%d")
         .build)
+  private val context = ExecutionContext.fromExecutorService(executor)
 
   private var kernel: KernelLike = _
+  private var scalaInterpreter: Option[Interpreter] = _
   private var executionCount = 0
   private var lastVar = Option.empty[String]
 
@@ -60,6 +62,7 @@ class SqlInterpreter() extends Interpreter {
 
   override def init(kernel: KernelLike): Interpreter = {
     this.kernel = kernel
+    this.scalaInterpreter = kernel.interpreter("Scala")
     this
   }
 
@@ -75,7 +78,7 @@ class SqlInterpreter() extends Interpreter {
 
     val spark = kernel.sparkSession
 
-    // TODO: this should use a real tokenizer
+    // TODO: this should use a real tokenizer and parser
     val statements = code.split(";").map(_.trim).filter(_.nonEmpty)
     val iter = statements.iterator
     var lastResult: (Result, Either[ExecuteOutput, ExecuteFailure]) =
@@ -104,7 +107,7 @@ class SqlInterpreter() extends Interpreter {
     val varName = nextVar
     this.lastVar = Some(varName)
 
-    val execution: Future[Option[(StructType, Array[Row])]] = Future {
+    val execution: Future[Option[(StructType, Array[Row], Option[String])]] = Future {
       val resultDF = spark.sql(sql)
 
       // save the query for later use
@@ -113,20 +116,21 @@ class SqlInterpreter() extends Interpreter {
       // determine the query type
       val logicalPlan = resultDF.queryExecution.logical
       if (logicalPlan.isInstanceOf[Command]) {
-        //resultDF.queryExecution.sparkPlan.execute()
-        Some((resultDF.schema, resultDF.take(1001)))
+        Some((resultDF.schema, resultDF.take(1001), None))
       } else {
-        // let Spark format the rows as a string
-        Some((resultDF.schema, resultDF.take(1001)))
+        scalaInterpreter.foreach(
+          _.bind(varName, "org.apache.spark.sql.DataFrame", resultDF, List.empty))
+        Some((resultDF.schema, resultDF.take(1001), Some(varName)))
       }
-    }(ExecutionContext.fromExecutorService(executor))
+    }(context)
 
     val converted: Future[(Result, Either[ExecuteOutput, ExecuteFailure])] =
       execution.map {
-        case Some((schema, rows)) =>
+        case Some((schema, rows, name)) =>
           val (text, html) = DisplayHelpers.displayRows(
             rows.take(1000),
-            Some(schema.map(_.name)),
+            name = name,
+            fields = Some(schema.map(_.name)),
             isTruncated = rows.length == 1001)
           (Results.Success, Left(Map(
             "text/plain" -> text,
@@ -134,7 +138,7 @@ class SqlInterpreter() extends Interpreter {
           )))
         case None =>
           (Results.Success, Left(Map.empty[String, String]))
-      }(ExecutionContext.fromExecutorService(executor))
+      }(context)
 
     val sqlFuture = converted.recover {
       case error: Throwable =>
@@ -142,7 +146,7 @@ class SqlInterpreter() extends Interpreter {
           error.getClass.getSimpleName,
           error.getMessage,
           error.getStackTrace.map(_.toString).toList)))
-    }(ExecutionContext.fromExecutorService(executor))
+    }(context)
 
     Await.result(sqlFuture, Duration.Inf)
   }
