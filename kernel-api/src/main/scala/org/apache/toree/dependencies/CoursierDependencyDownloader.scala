@@ -20,7 +20,6 @@ import java.io.{File, FileInputStream, PrintStream}
 import java.net.{URI, URL}
 import java.util.Properties
 import java.util.concurrent.ConcurrentHashMap
-
 import coursier.core.Authentication
 import coursier.Cache.Logger
 import coursier.Dependency
@@ -28,7 +27,7 @@ import coursier.core.Repository
 import coursier.ivy.{IvyRepository, IvyXml}
 import coursier.maven.MavenRepository
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver
-
+import scala.util.Try
 import scalaz.\/
 import scalaz.concurrent.Task
 
@@ -36,7 +35,10 @@ import scalaz.concurrent.Task
  * Represents a dependency downloader for jars that uses Coursier underneath.
  */
 class CoursierDependencyDownloader extends DependencyDownloader {
-  @volatile private var repositories: Seq[Repository] = Nil
+  @volatile private var repositories: Seq[Repository] = IvyRepository(
+    "http://artifacts.netflix.com/nfrepo-everything/[orgPath]/[module]/[revision]/[artifact](-[revision])(-[classifier]).[ext]",
+    Some("http://artifacts.netflix.com/nfrepo-everything/[orgPath]/[module]/[revision]/[module](-[revision])-ivy.xml")
+  ) :: Nil
   @volatile private var printStream: PrintStream = System.out
   @volatile private var localDirectory: URI = null
 
@@ -312,10 +314,12 @@ class CoursierDependencyDownloader extends DependencyDownloader {
    * @param repositories The repositories to convert
    * @return The resulting URIs
    */
-  private def repositoriesToURIs(repositories: Seq[Repository]) = repositories.map {
-    case IvyRepository(pattern, _, _, _, _, _, _, _, _)  => pattern
-    case MavenRepository(root, _, _, _)                  => root
-  }.map(new URI(_))
+  private def repositoriesToURIs(repositories: Seq[Repository]) = {
+    repositories.map {
+      case IvyRepository(pattern, _, _, _, _, _, _, _, _) => pattern
+      case MavenRepository(root, _, _, _) => root
+    }.map(s => Try(new URI(s))).filter(_.isSuccess).map(_.get)
+  }
 
   /** Creates new Ivy2 local repository using base home URI. */
   private def ivy2Local(ivy2HomeUri: URI) = IvyRepository(
