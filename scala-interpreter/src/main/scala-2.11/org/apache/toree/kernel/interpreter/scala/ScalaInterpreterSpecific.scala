@@ -19,14 +19,13 @@ package org.apache.toree.kernel.interpreter.scala
 
 import java.io._
 import java.net.URL
-
 import org.apache.toree.global.StreamState
 import org.apache.toree.interpreter.InterpreterTypes.ExecuteOutput
 import org.apache.toree.interpreter.imports.printers.{WrapperConsole, WrapperSystem}
 import org.apache.toree.interpreter.{ExecuteError, ExecuteFailure, Interpreter, Results}
 import scala.tools.nsc.interpreter.{InputStream => _, OutputStream => _, _}
 import scala.concurrent.Future
-import scala.tools.nsc.{Global, Settings, util}
+import scala.tools.nsc.{util, FatalError, Global, Settings}
 import scala.util.Try
 
 trait ScalaInterpreterSpecific extends SettingsProducerLike { this: ScalaInterpreter =>
@@ -257,10 +256,16 @@ trait ScalaInterpreterSpecific extends SettingsProducerLike { this: ScalaInterpr
   override def read(variableName: String): Option[AnyRef] = {
     require(iMain != null)
 
-    iMain.eval(variableName) match {
-      case null => None
-      case str: String if str.isEmpty => None
-      case res => Some(res)
+    try {
+      iMain.eval(variableName) match {
+        case null => None
+        case str: String if str.isEmpty => None
+        case res => Some(res)
+      }
+    } catch {
+      case e: Exception =>
+        logger.error(s"Failed to retrieve variable: $variableName", e)
+        None
     }
   }
 
@@ -375,12 +380,24 @@ trait ScalaInterpreterSpecific extends SettingsProducerLike { this: ScalaInterpr
     taskManager.add {
       // Add a task using the given state of our streams
       StreamState.withStreams {
-        if (silent) {
-          iMain.beSilentDuring {
+        try {
+          if (silent) {
+            iMain.beSilentDuring {
+              iMain.interpret(code)
+            }
+          } else {
             iMain.interpret(code)
           }
-        } else {
-          iMain.interpret(code)
+        } catch {
+          case f: FatalError =>
+            System.err.println(s"Fatal error while executing block: ${f.getClass.getName}: ${f.msg}:\n$code")
+            f.printStackTrace(System.err)
+            System.exit(1)
+            IR.Error
+
+          case e: Exception =>
+            logger.error(s"Failed to execute code block: $code", e)
+            IR.Error
         }
       }
     }
