@@ -19,12 +19,12 @@ package org.apache.toree.kernel.api
 
 import java.io.{InputStream, PrintStream}
 import java.net.URI
-import java.util.concurrent.{TimeoutException, ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, TimeoutException, TimeUnit}
 import scala.collection.mutable
 import com.typesafe.config.Config
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.toree.annotations.Experimental
 import org.apache.toree.boot.layer.InterpreterManager
 import org.apache.toree.comm.CommManager
@@ -36,7 +36,7 @@ import org.apache.toree.kernel.protocol.v5
 import org.apache.toree.kernel.protocol.v5.kernel.ActorLoader
 import org.apache.toree.kernel.protocol.v5.magic.MagicParser
 import org.apache.toree.kernel.protocol.v5.stream.KernelOutputStream
-import org.apache.toree.kernel.protocol.v5.{KMBuilder, SparkKernelInfo, KernelMessage, MIMEType}
+import org.apache.toree.kernel.protocol.v5.{Header, KernelMessage, KMBuilder, MessageType, MIMEType, Payloads, SparkKernelInfo, SystemActorType, UserExpressions}
 import org.apache.toree.magic.MagicManager
 import org.apache.toree.plugins.PluginManager
 import org.apache.toree.utils.{KeyValuePairUtils, LogLike}
@@ -44,9 +44,11 @@ import scala.language.dynamics
 import scala.reflect.runtime.universe._
 import scala.util.DynamicVariable
 import org.apache.spark.sql.SQLContext
+import org.apache.toree.interpreter.InterpreterTypes.InterpreterShutdownRequest
+import org.apache.toree.kernel.protocol.v5.content.{ExecuteReplyOk, ShutdownReply, ShutdownRequest}
 import org.apache.toree.plugins.SparkReady
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Future, Await}
+import scala.concurrent.{Await, Future}
 
 /**
  * Represents the main kernel API to be used for interaction.
@@ -58,11 +60,12 @@ import scala.concurrent.{Future, Await}
  */
 @Experimental
 class Kernel (
-  private val _config: Config,
-  private val actorLoader: ActorLoader,
-  val interpreterManager: InterpreterManager,
-  val comm: CommManager,
-  val pluginManager: PluginManager
+               private val _config: Config,
+               private val actorLoader: ActorLoader,
+               val interpreterManager: InterpreterManager,
+               val comm: CommManager,
+               val pluginManager: PluginManager,
+               requestShutdown: => Unit
 ) extends KernelLike with LogLike {
 
   /**
@@ -294,6 +297,16 @@ class Kernel (
     constructStream(currentInputStream, currentInputKernelMessage, kernelMessage, { kernelMessage =>
       this.factory(parentMessage = kernelMessage).newKernelInputStream()
     })
+  }
+
+  /**
+    * Requests that the kernel shut down.
+    */
+  override def shutdown(): Unit = {
+    // send to the ExecuteRequestRelay, which will include the ask_exit payload in
+    // the response to the current cell.
+    actorLoader.load(SystemActorType.ExecuteRequestRelay) ! InterpreterShutdownRequest
+    requestShutdown
   }
 
   /**

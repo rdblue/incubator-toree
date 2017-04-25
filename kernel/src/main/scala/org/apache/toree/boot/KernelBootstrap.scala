@@ -99,9 +99,10 @@ class KernelBootstrap(config: Config) extends LogLike {
       kernel, dependencyDownloader,
       magicManager, pluginManager, responseMap) =
       initializeComponents(
-        config      = config,
-        appName     = DefaultAppName,
-        actorLoader = actorLoader
+        config          = config,
+        appName         = DefaultAppName,
+        actorLoader     = actorLoader,
+        requestShutdown = shutdown()
       )
     this.interpreters ++= Seq(interpreter)
 

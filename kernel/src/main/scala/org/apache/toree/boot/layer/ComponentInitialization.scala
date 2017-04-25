@@ -49,7 +49,7 @@ trait ComponentInitialization {
    * @param actorLoader The actor loader to use for some initialization
    */
   def initializeComponents(
-    config: Config, appName: String, actorLoader: ActorLoader
+    config: Config, appName: String, actorLoader: ActorLoader, requestShutdown: => Unit
   ): (CommStorage, CommRegistrar, CommManager, Interpreter,
     Kernel, DependencyDownloader, MagicManager, PluginManager,
     collection.mutable.Map[String, ActorRef])
@@ -69,7 +69,7 @@ trait StandardComponentInitialization extends ComponentInitialization {
    * @param actorLoader The actor loader to use for some initialization
    */
   def initializeComponents(
-    config: Config, appName: String, actorLoader: ActorLoader
+    config: Config, appName: String, actorLoader: ActorLoader, requestShutdown: => Unit
   ) = {
     val (commStorage, commRegistrar, commManager) =
       initializeCommObjects(actorLoader)
@@ -81,7 +81,7 @@ trait StandardComponentInitialization extends ComponentInitialization {
     val dependencyDownloader = initializeDependencyDownloader(config)
     val pluginManager = createPluginManager(config, interpreterManager, dependencyDownloader)
 
-    val kernel = initializeKernel(config, actorLoader, interpreterManager, commManager, pluginManager)
+    val kernel = initializeKernel(config, actorLoader, interpreterManager, commManager, pluginManager, requestShutdown)
 
     initializePlugins(config, pluginManager)
 
@@ -147,7 +147,8 @@ trait StandardComponentInitialization extends ComponentInitialization {
     actorLoader: ActorLoader,
     interpreterManager: InterpreterManager,
     commManager: CommManager,
-    pluginManager: PluginManager
+    pluginManager: PluginManager,
+    requestShutdown: => Unit
   ) = {
 
     //kernel has a dependency on ScalaInterpreter to get the ClassServerURI for the SparkConf
@@ -160,7 +161,8 @@ trait StandardComponentInitialization extends ComponentInitialization {
       actorLoader,
       interpreterManager,
       commManager,
-      pluginManager
+      pluginManager,
+      requestShutdown
     ){
       override protected[toree] def createSparkConf(conf: SparkConf) = {
         val theConf = super.createSparkConf(conf)

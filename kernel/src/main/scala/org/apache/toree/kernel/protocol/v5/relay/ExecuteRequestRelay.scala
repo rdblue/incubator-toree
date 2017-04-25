@@ -22,10 +22,11 @@ import akka.actor.Actor
 import akka.pattern._
 import akka.util.Timeout
 import org.apache.toree.interpreter.{ExecuteAborted, ExecuteError, ExecuteFailure, ExecuteOutput}
+import org.apache.toree.interpreter.InterpreterTypes.InterpreterShutdownRequest
 import org.apache.toree.kernel.protocol.v5._
 import org.apache.toree.kernel.protocol.v5.content._
 import org.apache.toree.kernel.protocol.v5.kernel.ActorLoader
-import org.apache.toree.kernel.protocol.v5.magic.{PostProcessor, MagicParser}
+import org.apache.toree.kernel.protocol.v5.magic.{MagicParser, PostProcessor}
 import org.apache.toree.plugins.PluginManager
 import org.apache.toree.utils.LogLike
 import scala.concurrent.Future
@@ -42,6 +43,7 @@ case class ExecuteRequestRelay(
 {
   import context._
   implicit val timeout = Timeout(21474835.seconds)
+  private var sendShutdown = false
 
   /**
    * Takes an ExecuteFailure and (ExecuteReply, ExecuteResult) with contents
@@ -76,10 +78,16 @@ case class ExecuteRequestRelay(
     future: Future[Either[ExecuteOutput, ExecuteFailure]]
   ): Future[(ExecuteReply, ExecuteResult)] = future.map { value =>
     if (value.isLeft) {
+      val payloads = if (sendShutdown) {
+        sendShutdown = false // sent
+        Payloads(Map("source" -> "ask_exit"))
+      } else {
+        Payloads()
+      }
       val output = value.left.get
       val data = postProcessor.process(output)
       (
-        ExecuteReplyOk(1, Some(Payloads()), Some(UserExpressions())),
+        ExecuteReplyOk(1, Some(payloads), Some(UserExpressions())),
         ExecuteResult(1, data, Metadata())
       )
     } else {
@@ -117,5 +125,9 @@ case class ExecuteRequestRelay(
           val failure = ExecuteError("Error parsing magics!", error, Nil)
           Future { failureMatch(failure) }
       }) pipeTo oldSender
+
+    case InterpreterShutdownRequest =>
+
+      this.sendShutdown = true
   }
 }

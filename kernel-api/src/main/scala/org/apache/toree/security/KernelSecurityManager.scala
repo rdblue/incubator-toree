@@ -119,7 +119,7 @@ class KernelSecurityManager extends SecurityManager {
 
     if (currentGroup.getName == RestrictedGroupName) {
       // TODO: Determine why System.exit(...) is being blocked in the ShutdownHandler
-      System.out.println("Unauthorized system.exit detected!")
+      //System.out.println("Unauthorized system.exit detected!")
       //throw new SecurityException("Not allowed to invoke System.exit!")
     }
   }
