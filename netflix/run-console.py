@@ -3,6 +3,31 @@
 
 import os, sys
 
+TOREE_OPTION_KEYS = {
+        '--idle-timeout': 1
+    }
+
+def split_args(args):
+    """Partitions the argument list using a map of known options
+    """
+    spark_args = []
+    toree_args = []
+
+    i = 0
+    while i < len(args):
+        if args[i] in TOREE_OPTION_KEYS.keys():
+            toree_args.append(args[i])
+            num_values = TOREE_OPTION_KEYS[args[i]]
+            # consume the arg's values
+            for _ in range(num_values):
+                i += 1
+                toree_args.append(args[i])
+        else:
+            spark_args.append(args[i])
+
+        i += 1
+
+    return (spark_args, toree_args)
 
 def get_value(args, arg_key):
     """Returns an argument's value from the list of args
@@ -36,7 +61,11 @@ def mkdir_p(dir_path, mode=0777):
             os.mkdir(dir_path, mode)
 
 def main(args):
-    java_options, spark_args = get_value(args, '--driver-java-options')
+    spark_args, toree_args = split_args(args)
+    java_options, spark_args = get_value(spark_args, '--driver-java-options')
+    # get --jars, split on comma, and filter empty values
+    jarArg, spark_args = get_value(spark_args, '--jars')
+    jars = [ jar for jar in jarArg.split(',') if jar ] if jarArg else []
     driver_java_options = " ".join([ jarg for jarg in ["-noverify", java_options] if jarg ])
 
     spark_home = os.getenv('SPARK_HOME')
@@ -84,12 +113,15 @@ def main(args):
     kernel_cmd_args.append(driver_java_options)
     kernel_cmd_args.append("--deploy-mode")
     kernel_cmd_args.append("client")
+    kernel_cmd_args.append("--jars")
+    kernel_cmd_args.append(','.join(jars))
 
     # add toree args
     kernel_cmd_args.append("--class")
     kernel_cmd_args.append("org.apache.toree.Main")
     kernel_cmd_args.append(toree_assembly)
     kernel_cmd_args.extend(toree_env_opts.split() if toree_env_opts else [])
+    kernel_cmd_args.extend(toree_args)
     kernel_cmd_args.append("--profile")
     kernel_cmd_args.append(connect_file_path)
 

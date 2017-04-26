@@ -5,6 +5,7 @@ import os, sys
 
 TOREE_OPTION_KEYS = {
         '--profile': 1,
+        '--idle-timeout': 1
     }
 
 def split_args(args):
