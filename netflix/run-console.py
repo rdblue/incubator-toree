@@ -4,7 +4,8 @@
 import os, sys
 
 TOREE_OPTION_KEYS = {
-        '--idle-timeout': 1
+        '--idle-timeout': 1,
+        '--default-interpreter': 1
     }
 
 def split_args(args):
