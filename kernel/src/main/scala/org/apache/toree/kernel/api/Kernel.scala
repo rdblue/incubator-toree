@@ -306,7 +306,11 @@ class Kernel (
     // send to the ExecuteRequestRelay, which will include the ask_exit payload in
     // the response to the current cell.
     actorLoader.load(SystemActorType.ExecuteRequestRelay) ! InterpreterShutdownRequest
-    requestShutdown
+    import scala.concurrent.ExecutionContext.Implicits.global
+    val shutdownFuture = Future {
+      Thread.sleep(100) // wait for the response to go out before shutting down
+      requestShutdown
+    }
   }
 
   /**
