@@ -25,6 +25,7 @@ import com.typesafe.config.Config
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerStageSubmitted}
 import org.apache.toree.annotations.Experimental
 import org.apache.toree.boot.layer.InterpreterManager
 import org.apache.toree.comm.CommManager
@@ -36,16 +37,15 @@ import org.apache.toree.kernel.protocol.v5
 import org.apache.toree.kernel.protocol.v5.kernel.ActorLoader
 import org.apache.toree.kernel.protocol.v5.magic.MagicParser
 import org.apache.toree.kernel.protocol.v5.stream.KernelOutputStream
-import org.apache.toree.kernel.protocol.v5.{Header, KernelMessage, KMBuilder, MessageType, MIMEType, Payloads, SparkKernelInfo, SystemActorType, UserExpressions}
+import org.apache.toree.kernel.protocol.v5.{KernelMessage, KMBuilder, MIMEType, SparkKernelInfo, SystemActorType}
 import org.apache.toree.magic.MagicManager
 import org.apache.toree.plugins.PluginManager
-import org.apache.toree.utils.{KeyValuePairUtils, LogLike}
+import org.apache.toree.utils.LogLike
 import scala.language.dynamics
 import scala.reflect.runtime.universe._
 import scala.util.DynamicVariable
 import org.apache.spark.sql.SQLContext
 import org.apache.toree.interpreter.InterpreterTypes.InterpreterShutdownRequest
-import org.apache.toree.kernel.protocol.v5.content.{ExecuteReplyOk, ShutdownReply, ShutdownRequest}
 import org.apache.toree.plugins.SparkReady
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
@@ -430,6 +430,8 @@ class Kernel (
   private lazy val defaultSparkConf: SparkConf = createSparkConf(
     new SparkConf().setAppName(SparkKernelInfo.banner))
 
+  private var sparkMonitor: Option[SparkMonitor] = None
+
   override def sparkSession: SparkSession = {
     // the first call to getOrCreate may create a session and take a long time,
     // so this starts a future to get the session. if it take longer than 100 ms,
@@ -439,7 +441,7 @@ class Kernel (
       SparkSession.builder.config(defaultSparkConf).getOrCreate
     }
 
-    try {
+    val session = try {
       Await.result(sessionFuture, Duration(100, TimeUnit.MILLISECONDS))
     } catch {
       case timeout: TimeoutException =>
@@ -448,6 +450,22 @@ class Kernel (
         display.content(MIMEType.PlainText, "Waiting for a Spark session to start...")
         Await.result(sessionFuture, Duration.Inf)
     }
+
+    sparkMonitor match {
+      case Some(monitor) if monitor.sparkContext == session.sparkContext =>
+        monitor.touch()
+      case Some(monitor) =>
+        monitor.stop()
+        sparkMonitor = Some(new SparkMonitor(
+          session.sparkContext,
+          config.getDuration("spark_idle_timeout", TimeUnit.MILLISECONDS)))
+      case None =>
+        sparkMonitor = Some(new SparkMonitor(
+          session.sparkContext,
+          config.getDuration("spark_idle_timeout", TimeUnit.MILLISECONDS)))
+    }
+
+    session
   }
 
   override def sparkContext: SparkContext = sparkSession.sparkContext
@@ -461,6 +479,59 @@ class Kernel (
       javaContexts.getOrElseUpdate(
         sparkSession,
         new JavaSparkContext(sparkSession.sparkContext))
+    }
+  }
+
+  private class SparkMonitor(val sparkContext: SparkContext, val activeTimeoutMs: Long) extends SparkListener {
+    logger.info(s"Starting Spark monitor with timeout = $activeTimeoutMs ms")
+    sparkContext.addSparkListener(this)
+
+    val activeJobs = new mutable.HashSet[Int]
+    var lastActive: Long = System.currentTimeMillis
+
+    private val taskId = Some(global.ScheduledTaskManager.instance.addTask(timeInterval = 30000, task = {
+      if (sparkContext.isStopped) {
+        stop()
+      } else if (!isActive) {
+        val msg = s"No Spark interaction in ${activeTimeoutMs / 1000} seconds, stopping Spark."
+        display.content(MIMEType.PlainText, msg)
+        logger.info(msg)
+        sparkContext.stop()
+        stop()
+      }
+    }))
+
+    def stop(): Unit = {
+      logger.info(s"Stopping Spark monitor")
+      if (taskId.isDefined) {
+        global.ScheduledTaskManager.instance.removeTask(taskId.get)
+      }
+    }
+
+    def isActive: Boolean = {
+      activeJobs.nonEmpty || (System.currentTimeMillis - lastActive) < activeTimeoutMs
+    }
+
+    def touch(): Unit = {
+      lastActive = System.currentTimeMillis
+    }
+
+    override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+      touch()
+      activeJobs.add(jobStart.jobId)
+    }
+
+    override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+      touch()
+      activeJobs.remove(jobEnd.jobId)
+    }
+
+    override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
+      touch()
+    }
+
+    override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
+      touch()
     }
   }
 }

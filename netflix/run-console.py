@@ -5,6 +5,7 @@ import os, sys
 
 TOREE_OPTION_KEYS = {
         '--idle-timeout': 1,
+        '--spark-idle-timeout': 1,
         '--default-interpreter': 1
     }
 

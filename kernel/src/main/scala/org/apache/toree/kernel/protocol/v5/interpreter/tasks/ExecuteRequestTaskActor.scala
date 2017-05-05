@@ -48,10 +48,9 @@ class ExecuteRequestTaskActor(
     shutdownMonitorTaskId = if (kernel.config.hasPath("idle_timeout")) {
       val timeoutMs = kernel.config.getDuration("idle_timeout", TimeUnit.MILLISECONDS)
       Some(global.ScheduledTaskManager.instance.addTask(timeInterval = 30000, task = {
-        val now = System.currentTimeMillis
         if (!interpreterRunning && (System.currentTimeMillis - lastExecuteRequest > timeoutMs)) {
           val msg = s"No execution requests in ${timeoutMs / 1000} seconds, shutting down."
-          println(msg)
+          kernel.display.content(MIMEType.PlainText, msg)
           logger.info(msg)
           kernel.shutdown()
         }
