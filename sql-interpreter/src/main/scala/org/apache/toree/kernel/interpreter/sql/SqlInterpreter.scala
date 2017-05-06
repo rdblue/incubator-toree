@@ -19,9 +19,7 @@ package org.apache.toree.kernel.interpreter.sql
 import java.net.URL
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-
 import scala.collection.mutable
-
 import org.apache.toree.interpreter.Results.Result
 import org.apache.toree.interpreter._
 import org.apache.toree.kernel.api.KernelLike
@@ -31,14 +29,16 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.tools.nsc.interpreter.{InputStream, OutputStream}
-
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.Command
 import org.apache.spark.sql.types.StructType
-
 import com.google.common.util.concurrent.ThreadFactoryBuilder
+import org.apache.log4j.{Level, Logger}
+import org.apache.spark.deploy.Client
+import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.toree.interpreter.Results.Success
 
 /**
@@ -62,6 +62,20 @@ class SqlInterpreter() extends Interpreter {
 
   override def init(kernel: KernelLike): Interpreter = {
     this.kernel = kernel
+    if (kernel.config.getString("default_interpreter").equalsIgnoreCase("sql")) {
+      // this interpreter is the default, but can't run without Spark
+      // start a session as soon as possible
+      Future {
+        val clientLogger = Logger.getLogger("org.apache.spark.deploy.yarn.Client")
+        val originalLevel = clientLogger.getLevel
+        try {
+          clientLogger.setLevel(Level.ERROR)
+          kernel.sparkSession
+        } finally {
+          clientLogger.setLevel(originalLevel)
+        }
+      }(context)
+    }
     this.scalaInterpreter = kernel.interpreter("Scala")
     this
   }
@@ -164,7 +178,48 @@ class SqlInterpreter() extends Interpreter {
    * Attempt to determine if a multiline block of code is complete
    * @param code The code to determine for completeness
    */
-  override def isComplete(code: String): (String, String) = super.isComplete(code)
+  override def isComplete(code: String): (String, String) = {
+    val lines = code.split("\n", -1)
+    val numLines = lines.length
+    // for multiline code blocks, require an empty line before executing
+    // to mimic the behavior of ipython
+    if (numLines > 1) {
+      if (lines.last.matches("\\s*\\S.*")) {
+        ("incomplete", startingWhiteSpace(lines.last))
+      } else {
+        ("complete", "")
+      }
+    } else {
+      try {
+        val statements = code.split(";").map(_.trim).filter(_.nonEmpty)
+        statements.foreach(parser.parsePlan)
+        ("complete", "")
+      } catch {
+        case e: ParseException =>
+          ("incomplete", startingWhiteSpace(lines.last))
+      }
+    }
+  }
+
+  private def startingWhiteSpace(line: String): String = {
+    val indent = "^\\s+".r.findFirstIn(line).getOrElse("")
+    if (line.matches(".*[(]\\s*")) {
+      indent + "  "
+    } else {
+      indent
+    }
+  }
+
+  private lazy val parser: SparkSqlParser = {
+    // Yep, this is crazy.
+    val sqlContext = kernel.sparkSession.sqlContext
+    val getConf = sqlContext.getClass.getMethod("conf")
+    val sqlConfClass = getConf.getReturnType
+    val sqlConf = sqlConfClass.cast(getConf.invoke(sqlContext))
+    val parserClass = classOf[SparkSqlParser]
+    parserClass.getConstructor(sqlConfClass, classOf[Option[_]])
+      .newInstance(sqlConf.asInstanceOf[Object], None)
+  }
 
   /**
    * Starts the interpreter, initializing any internal state.
