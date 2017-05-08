@@ -99,6 +99,9 @@ class TaskManager(
   }
 
   private val taskManagerThreadFactory = new ThreadFactoryBuilder()
+    .setThreadFactory(new ThreadFactory {
+      override def newThread(r: Runnable): Thread = new Thread(threadGroup, r)
+    })
     .setDaemon(true)
     .setNameFormat("task-manager-%d")
     .build
