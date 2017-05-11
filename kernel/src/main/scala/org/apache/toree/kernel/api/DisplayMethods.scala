@@ -27,12 +27,16 @@ import org.apache.toree.kernel.protocol.v5.kernel.ActorLoader
  */
 class DisplayMethods(
   private val actorLoader: ActorLoader,
-  private val parentMessage: KernelMessage,
+  private val parentMessage: Option[KernelMessage],
   private val kernelMessageBuilder: KMBuilder)
 
   extends DisplayMethodsLike {
 
-  private[api] val kmBuilder = kernelMessageBuilder.withParent(parentMessage)
+  private[api] val kmBuilder = parentMessage.map(kernelMessageBuilder.withParent).getOrElse(kernelMessageBuilder)
+
+  def this(actorLoader: ActorLoader, parentMessage: KernelMessage, kernelMessageBuilder: KMBuilder) {
+    this(actorLoader, Some(parentMessage), kernelMessageBuilder)
+  }
 
   override def content(mimeType: String, data: String): Unit = {
     val displayData = v5.content.DisplayData("user", Map(mimeType -> data), Map())

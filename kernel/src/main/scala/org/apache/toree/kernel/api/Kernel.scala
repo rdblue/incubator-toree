@@ -217,7 +217,7 @@ class Kernel (
    * @return The collection of streaming methods
    */
   private[toree] def display(
-    parentMessage: v5.KernelMessage = lastKernelMessage(),
+    parentMessage: Option[v5.KernelMessage] = ExecuteRequestState.lastKernelMessage,
     kmBuilder: v5.KMBuilder = v5.KMBuilder()
   ): DisplayMethods = {
     new DisplayMethods(actorLoader, parentMessage, kmBuilder)
