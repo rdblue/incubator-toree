@@ -20,11 +20,11 @@ package org.apache.toree.kernel.interpreter.scala
 import java.io._
 import java.net.URL
 import org.apache.toree.global.StreamState
-import org.apache.toree.interpreter.InterpreterTypes.ExecuteOutput
 import org.apache.toree.interpreter.imports.printers.{WrapperConsole, WrapperSystem}
-import org.apache.toree.interpreter.{ExecuteError, ExecuteFailure, Interpreter, Results}
+import org.apache.toree.interpreter.{ExecuteError, Interpreter}
 import scala.tools.nsc.interpreter.{InputStream => _, OutputStream => _, _}
 import scala.concurrent.Future
+import scala.reflect.internal.util.ScalaClassLoader.URLClassLoader
 import scala.tools.nsc.{util, FatalError, Global, Settings}
 import scala.util.Try
 
@@ -35,9 +35,7 @@ trait ScalaInterpreterSpecific extends SettingsProducerLike { this: ScalaInterpr
   private var completer: PresentationCompilerCompleter = _
   private val exceptionHack = new ExceptionHack()
 
-  def _runtimeClassloader = {
-    _thisClassloader
-  }
+  lazy val _runtimeClassloader: URLClassLoader = new URLClassLoader(Seq[URL](), _thisClassloader)
 
   protected def newIMain(settings: Settings, out: JPrintWriter): IMain = {
     val s = new IMain(settings, out)
@@ -45,7 +43,7 @@ trait ScalaInterpreterSpecific extends SettingsProducerLike { this: ScalaInterpr
     s
   }
 
-  protected def convertAnnotationsToModifiers(
+  private def convertAnnotationsToModifiers(
                                                annotationInfos: List[Global#AnnotationInfo]
                                              ) = annotationInfos map {
     case a if a.toString == "transient" => "@transient"
@@ -56,12 +54,12 @@ trait ScalaInterpreterSpecific extends SettingsProducerLike { this: ScalaInterpr
     _.isEmpty
   }
 
-  protected def convertScopeToModifiers(scopeSymbol: Global#Symbol) = {
+  private def convertScopeToModifiers(scopeSymbol: Global#Symbol) = {
     (if (scopeSymbol.isImplicit) "implicit" else "") ::
       Nil
   }
 
-  protected def buildModifierList(termNameString: String) = {
+  private def buildModifierList(termNameString: String) = {
     import scala.language.existentials
     val termSymbol = iMain.symbolOfTerm(termNameString)
 
@@ -73,14 +71,14 @@ trait ScalaInterpreterSpecific extends SettingsProducerLike { this: ScalaInterpr
   }
 
 
-  protected def refreshDefinitions(): Unit = {
+  private def refreshDefinitions(): Unit = {
     iMain.definedTerms.foreach(termName => {
       val termNameString = termName.toString
       val termTypeString = iMain.typeOfTerm(termNameString).toLongString
       iMain.valueOfTerm(termNameString) match {
         case Some(termValue)  =>
           val modifiers = buildModifierList(termNameString)
-          logger.debug(s"Rebinding of $termNameString as " +
+          logger.info(s"Rebinding of $termNameString as " +
             s"${modifiers.mkString(" ")} $termTypeString")
           Try(iMain.beSilentDuring {
             iMain.bind(
@@ -88,7 +86,7 @@ trait ScalaInterpreterSpecific extends SettingsProducerLike { this: ScalaInterpr
             )
           })
         case None             =>
-          logger.debug(s"Ignoring rebinding of $termNameString")
+          logger.info(s"Ignoring rebinding of $termNameString")
       }
     })
   }
@@ -105,23 +103,14 @@ trait ScalaInterpreterSpecific extends SettingsProducerLike { this: ScalaInterpr
    * @param jars The list of jar locations
    */
   override def addJars(jars: URL*): Unit = {
-    //jars.foreach(_runtimeClassloader.addJar)
-
-    // Enable Scala class support
-    reinitializeSymbols()
-
-//    jars.foreach(_runtimeClassloader.addJar)
-//    updateCompilerClassPath(jars : _*)
-
-
-    iMain.addUrlsToClassPath(jars: _*)
-//    iMain.
-//    _runtimeClassloader =
-
-    // Refresh all of our variables
-    refreshDefinitions()
-
-
+    iMain.addUrlsToClassPath(jars:_*)
+    // the Scala interpreter will invalidate definitions for any package defined in
+    // the new Jars. This can easily include org.* and make the kernel inaccessible
+    // because it is bound using the previous package definition. To avoid problems,
+    // it is necessary to refresh variable definitions to use the new packages and
+    // to rebind the global definitions.
+    //refreshDefinitions()
+    bindVariables()
   }
 
   /**
@@ -370,6 +359,8 @@ trait ScalaInterpreterSpecific extends SettingsProducerLike { this: ScalaInterpr
       List(
         "-Yrepl-class-based",
         "-Yrepl-outdir", s"$dir"
+        // useful for debugging compiler classpath or package issues
+        // "-uniqid", "-explaintypes", "-usejavacp", "-Ylog-classpath"
     ), processAll = true)
     s
   }

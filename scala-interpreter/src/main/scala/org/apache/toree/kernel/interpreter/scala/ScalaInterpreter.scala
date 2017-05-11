@@ -59,7 +59,7 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
       Adding in the default classpaths as needed.
     */
   def appendClassPath(settings: Settings): Settings = {
-    settings.classpath.value = buildClasspath(_thisClassloader)
+    settings.classpath.value = buildClasspath(_runtimeClassloader)
     settings.embeddedDefaults(_runtimeClassloader)
     settings
   }
@@ -89,16 +89,20 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
      settings = appendClassPath(settings)
 
      start()
-     bindKernelVariable(kernel)
 
      // ensure bindings are defined before allowing user code to run
-     bindSparkSession()
-     bindSparkContext()
-     bindSqlContext()
-     defineImplicits()
+     bindVariables()
 
      this
    }
+
+  protected def bindVariables(): Unit = {
+    bindKernelVariable(kernel)
+    bindSparkSession()
+    bindSparkContext()
+    bindSqlContext()
+    defineImplicits()
+  }
 
    protected[scala] def buildClasspath(classLoader: ClassLoader): String = {
 
@@ -335,7 +339,7 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
     doQuietly(interpret(code))
   }
 
-   override def classLoader: ClassLoader = _runtimeClassloader
+  override def classLoader: ClassLoader = _runtimeClassloader
 
   /**
     * Returns the language metadata for syntax highlighting
