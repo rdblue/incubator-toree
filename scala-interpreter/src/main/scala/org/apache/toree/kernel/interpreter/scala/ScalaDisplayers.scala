@@ -15,6 +15,7 @@ import org.apache.spark.sql.SparkSession
 import jupyter.Displayer
 import jupyter.Displayers
 import jupyter.MIMETypes
+import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.toree.kernel.protocol.v5.MIMEType
 import org.apache.toree.magic.MagicOutput
 import org.apache.toree.utils.DisplayHelpers
@@ -78,13 +79,14 @@ object ScalaDisplayers {
           MIMEType.TextHtml -> html
         )
       } else {
+        val rmAddress = sc.hadoopConfiguration.get(YarnConfiguration.RM_WEBAPP_ADDRESS)
+        val yarnAppUrl = "http://%s/cluster/app/%s".format(rmAddress, appId)
         val webProxy = sc.hadoopConfiguration.get("yarn.web-proxy.address")
-        val masterHost = webProxy.split(":")(0)
         val html =
           s"""
              |<ul>
              |<li><a href="http://$webProxy/proxy/$appId" target="new_tab">Spark UI</a></li>
-             |<li><a href="http://$masterHost:8088/cluster/app/$appId" target="new_tab">Hadoop app: $appId</a></li>
+             |<li><a href="$yarnAppUrl" target="new_tab">Hadoop app: $appId</a></li>
              |<li>Local logs are available using %tail_log</li>
              |<li>Local logs are at: $logFile</li>
              |</ul>
@@ -93,9 +95,9 @@ object ScalaDisplayers {
           s"""
              |Spark $appId:
              |* http://$webProxy/proxy/$appId
-             |* http://$masterHost:8088/cluster/app/$appId
+             |* $yarnAppUrl
              |
-              |Local logs:
+             |Local logs:
              |* $logFile
              |* Also available using %tail_log
              |""".stripMargin
