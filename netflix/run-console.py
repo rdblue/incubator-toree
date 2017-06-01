@@ -82,6 +82,8 @@ def main(args):
     if not toree_assembly:
         raise StandardError("TOREE_ASSEMBLY is not set")
 
+    jars.insert(0, toree_assembly)
+
     if not work_path:
         raise StandardError("CURRENT_JOB_WORKING_DIR is not set")
 
