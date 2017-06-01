@@ -53,6 +53,7 @@ class SqlInterpreter() extends Interpreter {
   private val context = ExecutionContext.fromExecutorService(executor)
 
   private var kernel: KernelLike = _
+  private var sessionInitialized = false
   private var scalaInterpreter: Option[Interpreter] = _
   private var executionCount = 0
   private var lastVar = Option.empty[String]
@@ -71,6 +72,7 @@ class SqlInterpreter() extends Interpreter {
         try {
           clientLogger.setLevel(Level.ERROR)
           kernel.sparkSession
+          this.sessionInitialized = true
         } finally {
           clientLogger.setLevel(originalLevel)
         }
@@ -189,7 +191,7 @@ class SqlInterpreter() extends Interpreter {
       } else {
         ("complete", "")
       }
-    } else {
+    } else if (sessionInitialized) {
       try {
         val statements = code.split(";").map(_.trim).filter(_.nonEmpty)
         statements.foreach(parser.parsePlan)
@@ -198,6 +200,8 @@ class SqlInterpreter() extends Interpreter {
         case e: ParseException =>
           ("incomplete", startingWhiteSpace(lines.last))
       }
+    } else {
+      ("incomplete", startingWhiteSpace(lines.last))
     }
   }
 
