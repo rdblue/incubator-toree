@@ -24,6 +24,12 @@ package org.apache.toree.kernel.api
 trait DisplayMethodsLike {
 
   /**
+    * Send a display message from the given object.
+    * @param obj an object to display
+    */
+  def apply(obj: Any): Unit
+
+  /**
    * Send a display message of the specified mime-type and content
    * @param mimeType The mime-type of the content (i.e. text/html)
    * @param data The content to send for display

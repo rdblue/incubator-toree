@@ -1,10 +1,21 @@
 package org.apache.toree.utils
 
 import scala.collection.mutable
-
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{DataFrame, Row}
 
 object DisplayHelpers {
+  def displayDataFrame(
+        df: DataFrame,
+        numRows: Int = 100,
+        name: Option[String] = None): (String, String) = {
+    val takeRows = numRows + 1
+    val rows = df.take(takeRows)
+    DisplayHelpers.displayRows(
+      rows.take(numRows),
+      fields = Some(df.schema.map(_.name)),
+      isTruncated = rows.length == takeRows)
+  }
+
   def displayRows(
         rows: Array[Row],
         name: Option[String] = None,

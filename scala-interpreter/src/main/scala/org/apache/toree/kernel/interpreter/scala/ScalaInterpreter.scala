@@ -106,6 +106,7 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
     bindSparkSession()
     bindSparkContext()
     bindSqlContext()
+    defineDisplayFunc()
     defineImplicits()
   }
 
@@ -355,6 +356,10 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
         |import org.apache.spark.sql.functions._
       """.stripMargin
     doQuietly(interpret(code))
+  }
+
+  def defineDisplayFunc(): Unit = {
+    doQuietly(interpret("def display(obj: Any): Unit = kernel.display(obj)"))
   }
 
   override def classLoader: ClassLoader = _runtimeClassloader

@@ -17,9 +17,13 @@
 
 package org.apache.toree.kernel.api
 
+import scala.collection.JavaConverters._
+import jupyter.Displayers
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.toree.kernel.protocol.v5
-import org.apache.toree.kernel.protocol.v5.{KMBuilder, KernelMessage}
+import org.apache.toree.kernel.protocol.v5.{KernelMessage, KMBuilder}
 import org.apache.toree.kernel.protocol.v5.kernel.ActorLoader
+import org.apache.toree.utils.DisplayHelpers
 
 /**
  * Represents the methods available to send display content from the kernel to the
@@ -36,6 +40,19 @@ class DisplayMethods(
 
   def this(actorLoader: ActorLoader, parentMessage: KernelMessage, kernelMessageBuilder: KMBuilder) {
     this(actorLoader, Some(parentMessage), kernelMessageBuilder)
+  }
+
+  override def apply(obj: Any): Unit = {
+    obj match {
+      case ds: Dataset[_] =>
+        val (text, html) = DisplayHelpers.displayDataFrame(ds.toDF())
+        content(Map(
+          "text/plain" -> text,
+          "text/html" -> html
+        ))
+      case _ =>
+        content(Displayers.display(obj).asScala.toMap)
+    }
   }
 
   override def content(mimeType: String, data: String): Unit = {

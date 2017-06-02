@@ -157,6 +157,8 @@ project(':kernel-api') {
     compile project(':macros')
     compile project(':plugins')
 
+    compile 'com.github.jupyter:jvm-repr:0.1.0'
+
     provided "org.scala-lang:scala-library:$scalaFullVersion"
     provided "org.scala-lang:scala-compiler:$scalaFullVersion"
     provided "org.scala-lang:scala-reflect:$scalaFullVersion"
