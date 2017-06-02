@@ -62,7 +62,7 @@ def mkdir_p(dir_path, mode=0777):
         if not os.path.exists(dir_path):
             os.mkdir(dir_path, mode)
 
-def main(args):
+def main(script_name, args):
     spark_args, toree_args = split_args(args)
     java_options, spark_args = get_value(spark_args, '--driver-java-options')
     # get --jars, split on comma, and filter empty values
@@ -120,11 +120,19 @@ def main(args):
     kernel_cmd_args.append("--jars")
     kernel_cmd_args.append(','.join(jars))
 
-    # add toree args
     kernel_cmd_args.append("--class")
     kernel_cmd_args.append("org.apache.toree.Main")
     kernel_cmd_args.append(toree_assembly)
+
+    # add toree args
+    interpreter, toree_args = get_value(toree_args, '--default-interpreter')
+    if not interpreter and script_name == 'sql-console':
+        interpreter = 'SQL'
+
     kernel_cmd_args.extend(toree_env_opts.split() if toree_env_opts else [])
+    if interpreter:
+        kernel_cmd_args.append('--default-interpreter')
+        kernel_cmd_args.append(interpreter)
     kernel_cmd_args.extend(toree_args)
     kernel_cmd_args.append("--profile")
     kernel_cmd_args.append(connect_file_path)
@@ -148,4 +156,4 @@ def main(args):
 
 if __name__ == '__main__':
     # remove the command name
-    main(sys.argv[2:])
+    main(sys.argv[1], sys.argv[2:])
