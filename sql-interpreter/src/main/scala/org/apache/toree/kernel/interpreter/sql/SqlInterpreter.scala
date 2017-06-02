@@ -17,14 +17,13 @@
 package org.apache.toree.kernel.interpreter.sql
 
 import java.net.URL
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{Executors, TimeoutException, TimeUnit}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import org.apache.toree.interpreter.Results.Result
 import org.apache.toree.interpreter._
 import org.apache.toree.kernel.api.KernelLike
-import org.apache.toree.utils.DisplayHelpers
+import org.apache.toree.utils.{DisplayHelpers, TaskManager}
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
@@ -35,7 +34,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.Command
 import org.apache.spark.sql.types.StructType
-import com.google.common.util.concurrent.ThreadFactoryBuilder
+import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
 import jupyter.Displayers
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -51,13 +50,26 @@ class SqlInterpreter() extends Interpreter {
         .setDaemon(true)
         .setNameFormat("sql-interpreter-pool-%d")
         .build)
-  private val context = ExecutionContext.fromExecutorService(executor)
 
+  private val thisThread = ExecutionContext.fromExecutor(MoreExecutors.sameThreadExecutor())
+
+  private var taskManager: TaskManager = _
   private var kernel: KernelLike = _
   private var sessionInitialized = false
   private var scalaInterpreter: Option[Interpreter] = _
   private var executionCount = 0
   private var lastVar = Option.empty[String]
+
+  private lazy val maxInterpreterThreads: Int = {
+    if (kernel.config.hasPath("max_interpreter_threads")) {
+      kernel.config.getInt("max_interpreter_threads")
+    } else {
+      TaskManager.DefaultMaximumWorkers
+    }
+  }
+
+  protected def newTaskManager(): TaskManager =
+    new TaskManager(maximumWorkers = maxInterpreterThreads)
 
   private val queries: mutable.Map[String, DataFrame] =
     new mutable.HashMap[String, DataFrame]()
@@ -67,6 +79,7 @@ class SqlInterpreter() extends Interpreter {
     if (kernel.config.getString("default_interpreter").equalsIgnoreCase("sql")) {
       // this interpreter is the default, but can't run without Spark
       // start a session as soon as possible
+      import scala.concurrent.ExecutionContext.Implicits.global
       Future {
         val clientLogger = Logger.getLogger("org.apache.spark.deploy.yarn.Client")
         val originalLevel = clientLogger.getLevel
@@ -77,9 +90,10 @@ class SqlInterpreter() extends Interpreter {
         } finally {
           clientLogger.setLevel(originalLevel)
         }
-      }(context)
+      }
     }
     this.scalaInterpreter = kernel.interpreter("Scala")
+    start()
     this
   }
 
@@ -92,6 +106,7 @@ class SqlInterpreter() extends Interpreter {
    */
   override def interpret(code: String, silent: Boolean, output: Option[OutputStream]):
     (Result, Either[ExecuteOutput, ExecuteFailure]) = {
+    require(taskManager != null)
 
     val spark = kernel.sparkSession
 
@@ -130,7 +145,7 @@ class SqlInterpreter() extends Interpreter {
     val varName = nextVar
     this.lastVar = Some(varName)
 
-    val execution: Future[Option[(StructType, Array[Row], Option[String])]] = Future {
+    val execution: Future[Option[(StructType, Array[Row], Option[String])]] = taskManager.add {
       val resultDF = spark.sql(sql)
 
       // save the query for later use
@@ -145,7 +160,7 @@ class SqlInterpreter() extends Interpreter {
           _.bind(varName, "org.apache.spark.sql.DataFrame", resultDF, List.empty))
         Some((resultDF.schema, resultDF.take(1001), Some(varName)))
       }
-    }(context)
+    }
 
     val converted: Future[(Result, Either[ExecuteOutput, ExecuteFailure])] =
       execution.map {
@@ -161,7 +176,7 @@ class SqlInterpreter() extends Interpreter {
           )))
         case None =>
           (Results.Success, Left(Map.empty[String, String]))
-      }(context)
+      }(thisThread)
 
     val sqlFuture = converted.recover {
       case error: Throwable =>
@@ -169,7 +184,7 @@ class SqlInterpreter() extends Interpreter {
           error.getClass.getSimpleName,
           error.getMessage,
           error.getStackTrace.map(_.toString).toList)))
-    }(context)
+    }(thisThread)
 
     Await.result(sqlFuture, Duration.Inf)
   }
@@ -244,6 +259,8 @@ class SqlInterpreter() extends Interpreter {
    * @return A reference to the interpreter
    */
   override def start(): Interpreter = {
+    this.taskManager = newTaskManager()
+    taskManager.start()
     this
   }
 
@@ -252,8 +269,10 @@ class SqlInterpreter() extends Interpreter {
    * @return A reference to the interpreter
    */
   override def stop(): Interpreter = {
-    executor.shutdown()
-    executor.awaitTermination(1000, TimeUnit.MILLISECONDS)
+    if (taskManager != null) {
+      taskManager.stop()
+      this.taskManager = null
+    }
     this
   }
 
@@ -269,7 +288,28 @@ class SqlInterpreter() extends Interpreter {
   override def read(variableName: String): Option[AnyRef] = queries.get(variableName)
 
   override def interrupt(): Interpreter = {
-    // TODO: interrupt the executor's thread
+    require(taskManager != null)
+
+    // TODO: use SparkContext.setJobGroup to avoid killing all jobs
+    kernel.sparkContext.cancelAllJobs()
+
+    // give the task 100ms to complete before restarting the task manager
+    import scala.concurrent.ExecutionContext.Implicits.global
+    val finishedFuture = Future {
+      while (taskManager.isExecutingTask) {
+        Thread.sleep(10)
+      }
+    }
+
+    try {
+      Await.result(finishedFuture, Duration(100, TimeUnit.MILLISECONDS))
+      // Await returned, no need to interrupt tasks.
+    } catch {
+      case timeout: TimeoutException =>
+        // Force dumping of current task (begin processing new tasks)
+        taskManager.restart()
+    }
+
     this
   }
 

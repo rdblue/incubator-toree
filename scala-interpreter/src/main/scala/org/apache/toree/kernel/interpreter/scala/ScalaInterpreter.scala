@@ -19,6 +19,7 @@ package org.apache.toree.kernel.interpreter.scala
 
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.{ExecutionException, TimeoutException, TimeUnit}
+import com.google.common.util.concurrent.MoreExecutors
 import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.spark.SparkContext
 import org.apache.spark.repl.Main
@@ -29,7 +30,7 @@ import org.apache.toree.utils.TaskManager
 import org.slf4j.LoggerFactory
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.reflectiveCalls
 import scala.tools.nsc.Settings
 import scala.tools.nsc.interpreter.{IR, OutputStream}
@@ -45,16 +46,18 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
 
   ScalaDisplayers.ensureLoaded()
 
-   private var kernel: KernelLike = _
+  protected val thisThread = ExecutionContext.fromExecutor(MoreExecutors.sameThreadExecutor())
 
-   protected val logger = LoggerFactory.getLogger(this.getClass.getName)
+  private var kernel: KernelLike = _
 
-   protected val _thisClassloader = this.getClass.getClassLoader
+  protected val logger = LoggerFactory.getLogger(this.getClass.getName)
 
-   protected val lastResultOut = new ByteArrayOutputStream()
+  protected val _thisClassloader = this.getClass.getClassLoader
 
-   protected val multiOutputStream: OutputStream = lastResultOut
-   private[scala] var taskManager: TaskManager = _
+  protected val lastResultOut = new ByteArrayOutputStream()
+
+  protected val multiOutputStream: OutputStream = lastResultOut
+  private[scala] var taskManager: TaskManager = _
 
   /** Since the ScalaInterpreter can be started without a kernel, we need to ensure that we can compile things.
       Adding in the default classpaths as needed.
@@ -69,14 +72,15 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
   settings = appendClassPath(settings)
 
   private val maxInterpreterThreads: Int = {
-     if(config.hasPath("max_interpreter_threads"))
+     if (config.hasPath("max_interpreter_threads")) {
        config.getInt("max_interpreter_threads")
-     else
+     } else {
        TaskManager.DefaultMaximumWorkers
+     }
    }
 
-   protected def newTaskManager(): TaskManager =
-     new TaskManager(maximumWorkers = maxInterpreterThreads)
+  protected def newTaskManager(): TaskManager =
+    new TaskManager(maximumWorkers = maxInterpreterThreads)
 
   /**
     * This has to be called first to initialize all the settings.
@@ -157,12 +161,11 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
      kernel.sparkContext.cancelAllJobs()
 
      // give the task 100ms to complete before restarting the task manager
-     import scala.concurrent.ExecutionContext.Implicits.global
      val finishedFuture = Future {
        while (taskManager.isExecutingTask) {
          Thread.sleep(10)
        }
-     }
+     }(thisThread)
 
      try {
        Await.result(finishedFuture, Duration(100, TimeUnit.MILLISECONDS))
@@ -263,20 +266,17 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
    }
 
    protected def interpretMapToCustomResult(future: Future[IR.Result]) = {
-     import scala.concurrent.ExecutionContext.Implicits.global
-     future map {
+     future.map({
        case IR.Success             => Results.Success
        case IR.Error               => Results.Error
        case IR.Incomplete          => Results.Incomplete
-     } recover {
+     })(thisThread).recover({
        case ex: ExecutionException => Results.Aborted
-     }
+     })(thisThread)
    }
 
    protected def interpretMapToResultAndOutput(future: Future[Results.Result]) = {
-     import scala.concurrent.ExecutionContext.Implicits.global
-
-     future map {
+     future.map({
        case result @ (Results.Success | Results.Incomplete) =>
          val lastOutput = lastResultOut.toString("UTF-8").trim
          lastResultOut.reset()
@@ -298,7 +298,7 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
 
        case Results.Aborted =>
          (Results.Aborted, Right(null))
-     }
+     })(thisThread)
    }
 
    def bindSparkContext() = {
