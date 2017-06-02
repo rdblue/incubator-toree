@@ -18,7 +18,7 @@
 package org.apache.toree.kernel.interpreter.scala
 
 import java.io.ByteArrayOutputStream
-import java.util.concurrent.ExecutionException
+import java.util.concurrent.{ExecutionException, TimeoutException, TimeUnit}
 import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.spark.SparkContext
 import org.apache.spark.repl.Main
@@ -37,6 +37,7 @@ import scala.tools.nsc.util.ClassPath
 import org.apache.spark.sql.SQLContext
 import org.apache.toree.kernel.protocol.v5.MIMEType
 import jupyter.Displayers
+import scala.concurrent.duration.Duration
 
 
 class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends Interpreter with ScalaInterpreterSpecific {
@@ -152,8 +153,25 @@ class ScalaInterpreter(private val config:Config = ConfigFactory.load) extends I
    override def interrupt(): Interpreter = {
      require(taskManager != null)
 
-     // Force dumping of current task (begin processing new tasks)
-     taskManager.restart()
+     // TODO: use SparkContext.setJobGroup to avoid killing all jobs
+     kernel.sparkContext.cancelAllJobs()
+
+     // give the task 100ms to complete before restarting the task manager
+     import scala.concurrent.ExecutionContext.Implicits.global
+     val finishedFuture = Future {
+       while (taskManager.isExecutingTask) {
+         Thread.sleep(10)
+       }
+     }
+
+     try {
+       Await.result(finishedFuture, Duration(100, TimeUnit.MILLISECONDS))
+       // Await returned, no need to interrupt tasks.
+     } catch {
+       case timeout: TimeoutException =>
+         // Force dumping of current task (begin processing new tasks)
+         taskManager.restart()
+     }
 
      this
    }
