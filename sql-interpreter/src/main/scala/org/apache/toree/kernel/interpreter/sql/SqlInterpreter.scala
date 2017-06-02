@@ -181,27 +181,34 @@ class SqlInterpreter() extends Interpreter {
    * @param code The code to determine for completeness
    */
   override def isComplete(code: String): (String, String) = {
-    val lines = code.split("\n", -1)
-    val numLines = lines.length
-    // for multiline code blocks, require an empty line before executing
-    // to mimic the behavior of ipython
-    if (numLines > 1) {
-      if (lines.last.matches("\\s*\\S.*")) {
-        ("incomplete", startingWhiteSpace(lines.last))
-      } else {
+    code.trim match {
+      case "quit" | "exit" | ":q" =>
         ("complete", "")
-      }
-    } else if (sessionInitialized) {
-      try {
-        val statements = code.split(";").map(_.trim).filter(_.nonEmpty)
-        statements.foreach(parser.parsePlan)
-        ("complete", "")
-      } catch {
-        case e: ParseException =>
+
+      case _ =>
+        val lines = code.split("\n", -1)
+        val numLines = lines.length
+
+        // for multiline code blocks, require an empty line before executing
+        // to mimic the behavior of ipython
+        if (numLines > 1) {
+          if (lines.last.matches("\\s*\\S.*")) {
+            ("incomplete", startingWhiteSpace(lines.last))
+          } else {
+            ("complete", "")
+          }
+        } else if (sessionInitialized) {
+          try {
+            val statements = code.split(";").map(_.trim).filter(_.nonEmpty)
+            statements.foreach(parser.parsePlan)
+            ("complete", "")
+          } catch {
+            case e: ParseException =>
+              ("incomplete", startingWhiteSpace(lines.last))
+          }
+        } else {
           ("incomplete", startingWhiteSpace(lines.last))
-      }
-    } else {
-      ("incomplete", startingWhiteSpace(lines.last))
+        }
     }
   }
 
