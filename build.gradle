@@ -210,6 +210,8 @@ project(':sql-interpreter') {
     compile project(':plugins')
     compile project(':protocol')
     compile project(':kernel-api')
+
+    compile 'com.github.jupyter:jvm-repr:0.1.0'
   }
 }
 

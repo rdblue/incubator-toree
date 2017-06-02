@@ -19,6 +19,7 @@ package org.apache.toree.kernel.interpreter.sql
 import java.net.URL
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import org.apache.toree.interpreter.Results.Result
 import org.apache.toree.interpreter._
@@ -35,8 +36,8 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.Command
 import org.apache.spark.sql.types.StructType
 import com.google.common.util.concurrent.ThreadFactoryBuilder
+import jupyter.Displayers
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark.deploy.Client
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.toree.interpreter.Results.Success
@@ -94,29 +95,35 @@ class SqlInterpreter() extends Interpreter {
 
     val spark = kernel.sparkSession
 
-    // TODO: this should use a real tokenizer and parser
-    val statements = code.split(";").map(_.trim).filter(_.nonEmpty)
-    val iter = statements.iterator
-    var lastResult: (Result, Either[ExecuteOutput, ExecuteFailure]) =
-      (Success, Left(Map.empty[String, String]))
-    var failed = false
-    while (iter.hasNext && !failed) {
-      val sql = iter.next
-      lastResult = runStatement(sql, spark)
-      lastResult._1 match {
-        case Success if lastResult._2.isLeft =>
-          // successful if result is success AND output isn't ExecuteFailure
-          if (iter.hasNext) {
-            // if there is another statement to run, display output from last
-            kernel.display.content(lastResult._2.left.get)
-          }
-        case _ =>
-          // stop executing statements
-          failed = true
-      }
-    }
+    code.trim match {
+      case "spark" =>
+        (Results.Success, Left(Displayers.display(spark).asScala.toMap))
 
-    lastResult
+      case _ =>
+        // TODO: this should use a real tokenizer and parser
+        val statements = code.split(";").map(_.trim).filter(_.nonEmpty)
+        val iter = statements.iterator
+        var lastResult: (Result, Either[ExecuteOutput, ExecuteFailure]) =
+          (Success, Left(Map.empty[String, String]))
+        var failed = false
+        while (iter.hasNext && !failed) {
+          val sql = iter.next
+          lastResult = runStatement(sql, spark)
+          lastResult._1 match {
+            case Success if lastResult._2.isLeft =>
+              // successful if result is success AND output isn't ExecuteFailure
+              if (iter.hasNext) {
+                // if there is another statement to run, display output from last
+                kernel.display.content(lastResult._2.left.get)
+              }
+            case _ =>
+              // stop executing statements
+              failed = true
+          }
+        }
+
+        lastResult
+    }
   }
 
   private def runStatement(sql: String, spark: SparkSession): (Result, Either[ExecuteOutput, ExecuteFailure]) = {
@@ -182,7 +189,7 @@ class SqlInterpreter() extends Interpreter {
    */
   override def isComplete(code: String): (String, String) = {
     code.trim match {
-      case "quit" | "exit" | ":q" =>
+      case "quit" | "exit" | ":q" | "spark" =>
         ("complete", "")
 
       case _ =>
