@@ -49,13 +49,12 @@ def get_value(args, arg_key):
 
     return (value, remaining)
 
-# from Toree's install script
 def find_py4j(spark_home):
-    python_lib_contents = os.listdir("{0}/python/lib".format(spark_home))
-    try:
-        return list(filter(lambda filename: "py4j" in filename, python_lib_contents))[0]
-    except:
-        return None
+    # Find out where our matching py4j is located
+    zips = glob.glob(os.path.join(spark_home, 'python', 'lib', 'py4j-*.zip'))
+    if zips:
+        return zips[0]
+    return None
 
 def mkdir_p(dir_path, mode=0777):
     if not os.path.exists(dir_path):
@@ -131,7 +130,7 @@ def main(args):
 
     py4j = find_py4j(spark_home)
     if py4j:
-        os.environ['PYTHON_PATH'] = "{spark_home}/python:{spark_home}/python/lib/{py4j}".format(spark_home=spark_home, py4j=py4j)
+        os.environ['PYTHONPATH'] = os.pathsep.join([os.path.join(spark_home, 'python'), py4j])
     os.execv(command, command_args)
 
 if __name__ == '__main__':
